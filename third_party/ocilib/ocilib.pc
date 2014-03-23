@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+Name: ocilib
+Description: OCILIB is an open source and cross platform Oracle Driver that delivers efficient access to Oracle databases.
+URL: http://orclib.sourceforge.net/
+Version: 3.12.1
+Libs: -L${exec_prefix}/lib -locilib
+Cflags: -I${prefix}/include
+

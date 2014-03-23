@@ -1,0 +1,7 @@
+*.o
+*.lo
+*.la
+*.log
+config.log
+config.status
+Makefile
