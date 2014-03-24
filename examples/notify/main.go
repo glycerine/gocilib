@@ -27,7 +27,9 @@ import (
 func main() {
 	flagConnect := flag.String("connect", "", "DSN to connect to")
 	flag.Parse()
-	conn, err := gocilib.NewConnection("tgulacsi", "tgulacsi", "XE")
+
+	user, passwd, sid := gocilib.SplitDSN(*flagConnect)
+	conn, err := gocilib.NewConnection(user, passwd, sid)
 	if err != nil {
 		log.Fatalf("error connecting to %s: %v", *flagConnect, err)
 	}

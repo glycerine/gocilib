@@ -46,7 +46,7 @@ var subscriptions map[*C.OCI_Subscription]*Subscription
 
 func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscription, error) {
 	subs := Subscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), C.uint(61000), C.uint(61000)),
+		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), 0, 0),
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()

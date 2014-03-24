@@ -14,17 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "ocilib.h"
-#include <stdio.h>
+package gocilib
 
-void eventHandler(OCI_Event *event) {
-    printf("eventHandler(%x)\n", event);
-    goEventHandler((void*)event);
+// #cgo LDFLAGS: -locilib
+// #include "ocilib.h"
+import "C"
+
+func (stmt *Statement) ResultSet() (*Resultset, error) {
+	rs := C.OCI_GetResultset(stmt.handle)
+	if rs == nil {
+		return &Resultset{stmt: stmt}, getLastErr()
+	}
+	return &Resultset{handle: rs, stmt: stmt}, nil
 }
 
-OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout) {
-    printf("subscriptionRegister(conn=%x, name=%s, evt=%d, port=%d, timeout=%d, handler=%x)\n",
-            conn, name, evt, port, timeout, &eventHandler);
-    return OCI_SubscriptionRegister(conn, name, evt, &eventHandler, port, timeout);
+type Resultset struct {
+	handle *C.OCI_Resultset
+	stmt   *Statement
 }
 
+func (rs *Resultset) Next() error {
+	if C.OCI_FetchNext(rs.handle) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
+}
+
+func (rs *Resultset) RowsAffected() int64 {
+	return rs.stmt.RowsAffected()
+}

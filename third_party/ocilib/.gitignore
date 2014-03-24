@@ -2,6 +2,14 @@
 *.lo
 *.la
 *.log
+config.h*
+configure
+demo/Makefile*
+doc/html/Makefile
+libtool
+src/Makefile
 config.log
 config.status
 Makefile
+*.cache
+*~*

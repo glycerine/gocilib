@@ -17,7 +17,11 @@ OR the Oracle's
   1. environment variables: you can try [env](./env)
   or see Environment Variables below.
 
-  1. `./configure --with-oracle-charset=ansi --prefix=/usr/local && make && sudo make install`
+  1. `./configure --with-oracle-charset=ansi --prefix=/usr/local`
+  or (with instantclient at its default locations)
+  `./configure --with-oracle-charset=ansi --with-oracle-headers-path=/usr/include/oracle/11.2/client64 --with-oracle-lib-path=/usr/lib/oracle/11.2/client64/lib --prefix=/usr/local`
+
+  1. `make && sudo make install && sudo ldconfig`
 
 
 # Environment variables #

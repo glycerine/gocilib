@@ -22,6 +22,7 @@ import "C"
 
 type Statement struct {
 	handle *C.OCI_Statement
+	verb   string
 }
 
 func (conn *Connection) NewStatement() (*Statement, error) {
@@ -47,6 +48,7 @@ func (stmt *Statement) Close() error {
 			return getLastErr()
 		}
 		stmt.handle = nil
+		stmt.verb = ""
 	}
 	return nil
 }
@@ -55,6 +57,7 @@ func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
+	stmt.verb = ""
 	return nil
 }
 
@@ -62,5 +65,29 @@ func (stmt *Statement) Execute(qry string) error {
 	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
+	stmt.verb = ""
 	return nil
+}
+
+func (stmt *Statement) Verb() string {
+	if stmt.verb == "" {
+		stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	}
+	return stmt.verb
+}
+
+func (stmt *Statement) IsDDL() bool {
+	switch stmt.Verb() {
+	case "SELECT", "INSERT", "UPDATE", "DELETE":
+		return false
+	default:
+		return true
+	}
+}
+
+func (stmt *Statement) RowsAffected() int64 {
+	if stmt.Verb() == "SELECT" {
+		return int64(C.OCI_GetRowCount(C.OCI_GetResultset(stmt.handle)))
+	}
+	return int64(C.OCI_GetAffectedRows(stmt.handle))
 }
