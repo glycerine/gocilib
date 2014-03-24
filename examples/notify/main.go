@@ -94,7 +94,7 @@ func main() {
 	}()
 
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		log.Printf("no event received in 5 seconds")
 	case event := <-events:
 		log.Printf("got event %#v", event)

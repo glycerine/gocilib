@@ -38,7 +38,6 @@ const (
 
 type Subscription struct {
 	handle *C.OCI_Subscription
-	conn   *Connection
 	events chan Event
 }
 
@@ -47,8 +46,7 @@ var subscriptions map[*C.OCI_Subscription]*Subscription
 
 func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscription, error) {
 	subs := Subscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), C.uint(5468), 5),
-		conn:   conn,
+		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), C.uint(61000), C.uint(61000)),
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()
@@ -72,8 +70,8 @@ func (subs *Subscription) AddStatement(st *Statement) (<-chan Event, error) {
 }
 
 // AddQuery is a conveniance function which prepares the query and adds the statement.
-func (subs *Subscription) AddQuery(qry string) (<-chan Event, error) {
-	stmt, err := subs.conn.NewPreparedStatement(qry)
+func (subs *Subscription) AddQuery(conn *Connection, qry string) (<-chan Event, error) {
+	stmt, err := conn.NewPreparedStatement(qry)
 	if err != nil {
 		return nil, err
 	}
