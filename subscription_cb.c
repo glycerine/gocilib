@@ -15,12 +15,16 @@ limitations under the License.
 */
 
 #include "ocilib.h"
+#include <stdio.h>
 
 void eventHandler(OCI_Event *event) {
+    printf("eventHandler(%s)", event);
     goEventHandler((void*)event);
 }
 
 OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout) {
+    printf("subscriptionRegister(conn=%s, name=%s, evt=%d, port=%d, timeout=%d, handler=%s)",
+            conn, name, evt, port, timeout, &eventHandler);
     return OCI_SubscriptionRegister(conn, name, evt, &eventHandler, port, timeout);
 }
 

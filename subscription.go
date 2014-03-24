@@ -22,6 +22,7 @@ package gocilib
 import "C"
 
 import (
+	"log"
 	"sync"
 	"unsafe"
 )
@@ -37,6 +38,7 @@ const (
 
 type Subscription struct {
 	handle *C.OCI_Subscription
+	conn   *Connection
 	events chan Event
 }
 
@@ -44,9 +46,9 @@ var subscriptionsMu sync.Mutex
 var subscriptions map[*C.OCI_Subscription]*Subscription
 
 func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscription, error) {
-	port := 0
 	subs := Subscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), C.uint(port), 5),
+		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), C.uint(5468), 5),
+		conn:   conn,
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()
@@ -59,6 +61,23 @@ func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscripti
 	subscriptions[subs.handle] = &subs
 	subscriptionsMu.Unlock()
 	return &subs, nil
+}
+
+// AddStatement adds the statement to be watched, and returns the event channel.
+func (subs *Subscription) AddStatement(st *Statement) (<-chan Event, error) {
+	if C.OCI_SubscriptionAddStatement(subs.handle, st.handle) != C.TRUE {
+		return nil, getLastErr()
+	}
+	return subs.events, nil
+}
+
+// AddQuery is a conveniance function which prepares the query and adds the statement.
+func (subs *Subscription) AddQuery(qry string) (<-chan Event, error) {
+	stmt, err := subs.conn.NewPreparedStatement(qry)
+	if err != nil {
+		return nil, err
+	}
+	return subs.AddStatement(stmt)
 }
 
 func (subs *Subscription) Unregister() error {
@@ -96,6 +115,7 @@ type Event struct {
 
 //export goEventHandler
 func goEventHandler(eventP unsafe.Pointer) {
+	log.Printf("EVENT %p", eventP)
 	event := (*C.OCI_Event)(eventP)
 	typ := C.OCI_EventGetType(event)
 	op := C.OCI_EventGetOperation(event)

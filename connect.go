@@ -45,8 +45,18 @@ func NewConnection(user, passwd, sid string) (*Connection, error) {
 	}
 	connNum++
 	connNumMu.Unlock()
-	C.OCI_SetAutoCommit(conn.handle, C.FALSE)
-	return &conn, nil
+	return &conn, (&conn).SetAutoCommit(false)
+}
+
+func (conn *Connection) SetAutoCommit(commit bool) error {
+	c := C.int(C.TRUE)
+	if !commit {
+		c = C.FALSE
+	}
+	if C.OCI_SetAutoCommit(conn.handle, c) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
 }
 
 // Close closes the connection, and cleans up if this was the last connection

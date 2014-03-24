@@ -32,12 +32,28 @@ func (conn *Connection) NewStatement() (*Statement, error) {
 	return &stmt, nil
 }
 
+// NewPreparedStatement is a conveniance function for NewStatement.Prepare(qry).
+func (conn *Connection) NewPreparedStatement(qry string) (*Statement, error) {
+	stmt, err := conn.NewStatement()
+	if err != nil {
+		return nil, err
+	}
+	return stmt, stmt.Prepare(qry)
+}
+
 func (stmt *Statement) Close() error {
 	if stmt.handle != nil {
 		if C.OCI_StatementFree(stmt.handle) != C.TRUE {
 			return getLastErr()
 		}
 		stmt.handle = nil
+	}
+	return nil
+}
+
+func (stmt *Statement) Prepare(qry string) error {
+	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
+		return getLastErr()
 	}
 	return nil
 }

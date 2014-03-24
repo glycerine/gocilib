@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"log"
+	"time"
 
 	"github.com/tgulacsi/gocilib"
 )
@@ -52,5 +53,50 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating subscription: %v", err)
 	}
+	defer sub.Close()
+
 	log.Printf("sub: %#v", sub)
+
+	st, err := conn.NewStatement()
+	if err != nil {
+		log.Fatalf("error creating statement: %v", err)
+	}
+	if err = st.Prepare("SELECT * FROM TST_notify"); err != nil {
+		log.Fatalf("error preparing query: %v", err)
+	}
+	events, err := sub.AddStatement(st)
+	if err != nil {
+		log.Fatalf("error registering query: %v", err)
+	}
+
+	if err = conn.SetAutoCommit(true); err != nil {
+		log.Fatalf("error setting autocommit: %v", err)
+	}
+
+	go func() {
+		log.Printf("Executing some DDL operation ...")
+		if err := st.Execute("ALTER TABLE TST_notify ADD dt DATE DEFAULT SYSDATE"); err != nil {
+			log.Printf("error altering table: %v", err)
+		}
+		time.Sleep(1 * time.Second)
+		log.Printf("Executing some DML operation ...")
+		for i, qry := range []string{
+			"INSERT INTO TST_notify (key, value) VALUES ('1', 'AAA')",
+			"INSERT INTO TST_notify (key, value) VALUES ('2', 'AAA')",
+			"UPDATE TST_notify SET VALUE = 'BBB' WHERE key = '1'",
+			"DELETE TST_notify WHERE key = '2'",
+		} {
+			if err := st.Execute(qry); err != nil {
+				log.Printf("%d. ERROR executing %s: %v", i, qry, err)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
+	select {
+	case <-time.After(5 * time.Second):
+		log.Printf("no event received in 5 seconds")
+	case event := <-events:
+		log.Printf("got event %#v", event)
+	}
 }
