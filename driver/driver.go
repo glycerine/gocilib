@@ -15,6 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package driver
 
 import (
@@ -58,7 +59,10 @@ func filterErr(err error) error {
 
 // Prepare the query for execution, return a prepared statement and error
 func (c conn) Prepare(query string) (driver.Stmt, error) {
-	st := c.cx.NewStatement()
+	st, err := c.cx.NewStatement()
+	if err != nil {
+		return nil, err
+	}
 	if strings.Index(query, ":1") < 0 && strings.Index(query, "?") >= 0 {
 		q := strings.Split(query, "?")
 		q2 := make([]string, 0, 2*len(q)-1)
@@ -71,7 +75,7 @@ func (c conn) Prepare(query string) (driver.Stmt, error) {
 		query = strings.Join(q2, "")
 	}
 	debug("%p.Prepare(%s)", st, query)
-	err := st.Prepare(query)
+	err = st.Prepare(query)
 	if err != nil {
 		return nil, filterErr(err)
 	}
@@ -92,9 +96,7 @@ type tx struct {
 // begins a transaction
 func (c conn) Begin() (driver.Tx, error) {
 	if !c.cx.IsConnected() {
-		if err := c.cx.Connect(0, false); err != nil {
-			return nil, filterErr(err)
-		}
+		return nil, errors.New("not connected")
 	}
 	return tx{cx: c.cx}, nil
 }
@@ -117,27 +119,27 @@ func (t tx) Rollback() error {
 
 // closes statement
 func (s stmt) Close() error {
-	if s.cu != nil {
-		debug("CLOSEing statement %p (%s)", s.cu, s.statement)
-		s.cu.Close()
-		s.cu = nil
+	if s.st != nil {
+		debug("CLOSEing statement %p (%s)", s.st, s.statement)
+		s.st.Close()
+		s.st = nil
 	}
 	return nil
 }
 
 // number of input parameters
 func (s stmt) NumInput() int {
-	names, err := s.cu.GetBindNames()
+	names, err := s.st.GetBindNames()
 	if err != nil {
-		log.Printf("error getting bind names of %p: %s", s.cu, err)
+		log.Printf("error getting bind names of %p: %s", s.st, err)
 		return -1
 	}
 	return len(names)
 }
 
 type rowsRes struct {
-	rs   *gocilib.ResultSet
-	cols []gocilib.VariableDescription
+	rs   *gocilib.Resultset
+	cols []gocilib.ColDesc
 }
 
 // executes the statement
@@ -153,16 +155,16 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 
 	var err error
 	a := (*[]interface{})(unsafe.Pointer(&args))
-	debug("%p.run(%s, %v)", s.cu, s.statement, *a)
-	if err = s.cu.Execute(s.statement, *a, nil); err != nil {
+	debug("%p.run(%s, %v)", s.st, s.statement, *a)
+	if err = s.st.Execute(s.statement, *a, nil); err != nil {
 		return nil, filterErr(err)
 	}
 
-	rs, err := s.cu.Resultset()
+	rs, err := s.st.Resultset()
 	if err != nil {
 		return nil, err
 	}
-	return &rowsRes{rs: rs}, nil
+	return &rowsRes{rs: rs, cols: rs.Columns()}, nil
 }
 
 func (s stmt) Exec(args []driver.Value) (driver.Result, error) {
@@ -205,7 +207,7 @@ func (r rowsRes) Close() error {
 func (r rowsRes) Next(dest []driver.Value) error {
 	row := (*[]interface{})(unsafe.Pointer(&dest))
 	// log.Printf("FetcOneInto(%p %+v len=%d) %T", row, *row, len(*row), *row)
-	err := r.cu.FetchOneInto(*row...)
+	err := r.st.FetchOneInto(*row...)
 	debug("fetched row=%p %+v (len=%d) err=%s", row, *row, len(*row), err)
 	return err
 }
@@ -233,7 +235,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 		return nil, err
 	}
 	if d.autocommit {
-		err = cx.SetAutocommit(true)
+		err = cx.SetAutoCommit(true)
 	}
 	return &conn{cx: cx}, err
 }

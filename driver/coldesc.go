@@ -49,12 +49,15 @@ type ColDesc struct {
 func (r rowsRes) DescribeColumns() []ColDesc {
 	cls := make([]ColDesc, len(r.cols))
 	for i, c := range r.cols {
-		cls[i] = ColDesc{Name: c.Name, TypeName: "",
+		cls[i] = ColDesc{
+			Name:         c.Name,
+			TypeName:     c.TypeName,
 			DisplaySize:  c.DisplaySize,
 			InternalSize: c.InternalSize,
 			Precision:    c.Precision,
 			Scale:        c.Scale,
-			Nullable:     c.NullOk}
+			Nullable:     c.Nullable,
+		}
 	}
 	return cls
 }

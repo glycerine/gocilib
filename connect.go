@@ -77,6 +77,13 @@ func NewConnection(user, passwd, sid string) (*Connection, error) {
 	return &conn, (&conn).SetAutoCommit(false)
 }
 
+func (conn *Connection) IsConnected() bool {
+	if conn != nil && conn.handle != nil {
+		return C.OCI_IsConnected(conn.handle) == C.TRUE
+	}
+	return false
+}
+
 func (conn *Connection) SetAutoCommit(commit bool) error {
 	c := C.int(C.TRUE)
 	if !commit {
@@ -84,6 +91,24 @@ func (conn *Connection) SetAutoCommit(commit bool) error {
 	}
 	if C.OCI_SetAutoCommit(conn.handle, c) != C.TRUE {
 		return getLastErr()
+	}
+	return nil
+}
+
+func (conn *Connection) Commit() error {
+	if conn != nil && conn.handle != nil {
+		if C.OCI_Commit(conn.handle) != C.TRUE {
+			return getLastErr()
+		}
+	}
+	return nil
+}
+
+func (conn *Connection) Rollback() error {
+	if conn != nil && conn.handle != nil {
+		if C.OCI_Rollback(conn.handle) != C.TRUE {
+			return getLastErr()
+		}
 	}
 	return nil
 }
