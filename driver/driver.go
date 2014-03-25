@@ -156,7 +156,7 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 	var err error
 	a := (*[]interface{})(unsafe.Pointer(&args))
 	debug("%p.run(%s, %v)", s.st, s.statement, *a)
-	if err = s.st.Execute(s.statement, *a, nil); err != nil {
+	if err = s.st.BindExecute(s.statement, args, nil); err != nil {
 		return nil, filterErr(err)
 	}
 
