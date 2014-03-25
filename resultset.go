@@ -20,7 +20,16 @@ package gocilib
 // #include "ocilib.h"
 import "C"
 
-func (stmt *Statement) ResultSet() (*Resultset, error) {
+import (
+	"database/sql/driver"
+	"fmt"
+	"time"
+	"unsafe"
+)
+
+var zeroTime time.Time
+
+func (stmt *Statement) Results() (*Resultset, error) {
 	rs := C.OCI_GetResultset(stmt.handle)
 	if rs == nil {
 		return &Resultset{stmt: stmt}, getLastErr()
@@ -31,6 +40,7 @@ func (stmt *Statement) ResultSet() (*Resultset, error) {
 type Resultset struct {
 	handle *C.OCI_Resultset
 	stmt   *Statement
+	cols   []ColDesc
 }
 
 func (rs *Resultset) Next() error {
@@ -40,8 +50,80 @@ func (rs *Resultset) Next() error {
 	return nil
 }
 
+func (rs *Resultset) Close() error {
+	rs.handle = nil
+	return nil
+}
+
 func (rs *Resultset) RowsAffected() int64 {
 	return rs.stmt.RowsAffected()
+}
+
+func (rs *Resultset) FetchInto(row []driver.Value) error {
+	for i, v := range row {
+		isNull := C.OCI_IsNull(rs.handle, C.uint(i+1)) == C.TRUE
+		switch x := v.(type) {
+		case int64:
+			if isNull {
+				row[i] = 0
+			} else {
+				row[i] = int64(C.OCI_GetBigInt(rs.handle, C.uint(i+1)))
+			}
+		case float64:
+			if isNull {
+				row[i] = 0
+			} else {
+				row[i] = C.OCI_GetDouble(rs.handle, C.uint(i+1))
+			}
+		case bool:
+			if isNull {
+				row[i] = false
+				continue
+			}
+			s := C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+			if len(s) == 0 {
+				row[i] = false
+			} else {
+				switch row[0] {
+				case 'I', 'i', 't', 'T', 'Y', 'y':
+					row[i] = true
+				case 'n', 'N', 'f', 'F', '0':
+					row[i] = false
+				case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+					row[i] = true
+				default:
+					row[i] = false
+				}
+			}
+		case []byte:
+			if isNull {
+				row[i] = x[:0]
+				continue
+			}
+			n := C.OCI_GetRaw(rs.handle, C.uint(i+1), unsafe.Pointer(&x[0]), C.uint(cap(x)))
+			row[i] = x[:n]
+		case string:
+			if isNull {
+				row[i] = ""
+				continue
+			}
+			row[i] = C.OCI_GetString(rs.handle, C.uint(i+1))
+		case time.Time:
+			if isNull {
+				row[i] = zeroTime
+				continue
+			}
+			od := C.OCI_GetDate(rs.handle, C.uint(i+1))
+			var y, m, d, H, M, S C.int
+			if C.OCI_DateGetDateTime(od, &y, &m, &d, &H, &M, &S) != C.TRUE {
+				return getLastErr()
+			}
+			row[i] = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
+		default:
+			return fmt.Errorf("FetchInto(%d.): unknown type %T", i, v)
+		}
+	}
+	return nil
 }
 
 type ColType uint8
@@ -90,17 +172,19 @@ type ColDesc struct {
 }
 
 func (rs *Resultset) Columns() []ColDesc {
-	colCount := C.OCI_GetColumnCount(rs.handle)
-	cols := make([]ColDesc, int(colCount))
-	for i := C.uint(1); i <= colCount; i++ {
-		c := C.OCI_GetColumn(rs.handle, i)
-		cols[i].Name = C.GoString(C.OCI_ColumnGetName(c))
-		cols[i].Type = ColType(C.OCI_ColumnGetType(c))
-		cols[i].TypeName = C.GoString(C.OCI_ColumnGetSQLType(c))
-		cols[i].InternalSize = int(C.OCI_ColumnGetSize(c))
-		cols[i].Precision = int(C.OCI_ColumnGetPrecision(c))
-		cols[i].Scale = int(C.OCI_ColumnGetScale(c))
-		cols[i].Nullable = C.OCI_ColumnGetNullable(c) == C.TRUE
+	if rs.cols == nil {
+		colCount := C.OCI_GetColumnCount(rs.handle)
+		rs.cols = make([]ColDesc, int(colCount))
+		for i := C.uint(1); i <= colCount; i++ {
+			c := C.OCI_GetColumn(rs.handle, i)
+			rs.cols[i].Name = C.GoString(C.OCI_ColumnGetName(c))
+			rs.cols[i].Type = ColType(C.OCI_ColumnGetType(c))
+			rs.cols[i].TypeName = C.GoString(C.OCI_ColumnGetSQLType(c))
+			rs.cols[i].InternalSize = int(C.OCI_ColumnGetSize(c))
+			rs.cols[i].Precision = int(C.OCI_ColumnGetPrecision(c))
+			rs.cols[i].Scale = int(C.OCI_ColumnGetScale(c))
+			rs.cols[i].Nullable = C.OCI_ColumnGetNullable(c) == C.TRUE
+		}
 	}
-	return cols
+	return rs.cols
 }

@@ -19,7 +19,8 @@ package gocilib
 // #cgo LDFLAGS: -locilib
 // #include "ocilib.h"
 //
-// const int sof_voidp = sizeof(void*);
+// const int sof_OCI_DateP = sizeof(OCI_Date*);
+// const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
 import "C"
 
 import (
@@ -128,6 +129,10 @@ func (stmt *Statement) IsDDL() bool {
 	}
 }
 
+func (stmt *Statement) BindCount() int {
+	return int(C.OCI_GetBindCount(stmt.handle))
+}
+
 func (stmt *Statement) RowsAffected() int64 {
 	if stmt.Verb() == "SELECT" {
 		return int64(C.OCI_GetRowCount(C.OCI_GetResultset(stmt.handle)))
@@ -219,26 +224,95 @@ Outer:
 		ok = C.OCI_BindDate(h, nm, od)
 	case []time.Time:
 		od := C.OCI_DateArrayCreate(C.OCI_StatementGetConnection(stmt.handle), C.uint(len(x)))
-		sof_voidp := C.int(C.sof_voidp)
+		sof_OCI_DateP := C.int(C.sof_OCI_DateP)
 		for i, t := range x {
 			y, m, d := t.Date()
 			H, M, S := t.Clock()
 			if C.OCI_DateSetDateTime(
 				(*C.OCI_Date)(unsafe.Pointer(
-					uintptr(unsafe.Pointer(od))+uintptr(sof_voidp*C.int(i))),
+					uintptr(unsafe.Pointer(od))+uintptr(sof_OCI_DateP*C.int(i))),
 				),
 				C.int(y), C.int(m), C.int(d), C.int(H), C.int(M), C.int(S),
 			) != C.TRUE {
 				break Outer
 			}
 		}
+		ok = C.OCI_BindArrayOfDates(h, nm, od, C.uint(len(x)))
 	case time.Duration:
 		oi := C.OCI_IntervalCreate(C.OCI_StatementGetConnection(stmt.handle), C.OCI_INTERVAL_DS)
-		d, H, M, S, F := durationAsDays(x)
-		if C.OCI_IntervalSetDaySecond(oi, C.int(d), C.int(H), C.int(M), C.int(S), C.int(F)) != C.TRUE {
+		d, H, M, S, ms := durationAsDays(x)
+		if C.OCI_IntervalSetDaySecond(oi, C.int(d), C.int(H), C.int(M), C.int(S), C.int(ms/100)) != C.TRUE {
 			break
 		}
 		ok = C.OCI_BindInterval(h, nm, oi)
+	case []time.Duration:
+		oi := C.OCI_IntervalArrayCreate(C.OCI_StatementGetConnection(stmt.handle), C.OCI_INTERVAL_DS, C.uint(len(x)))
+		sof_OCI_IntervalP := C.int(C.sof_OCI_IntervalP)
+		for i, t := range x {
+			d, H, M, S, ms := durationAsDays(t)
+			if C.OCI_IntervalSetDaySecond(
+				(*C.OCI_Interval)(unsafe.Pointer(
+					uintptr(unsafe.Pointer(oi))+uintptr(sof_OCI_IntervalP*C.int(i)))),
+				C.int(d), C.int(H), C.int(M), C.int(S), C.int(ms/100),
+			) != C.TRUE {
+				break Outer
+			}
+		}
+		ok = C.OCI_BindArrayOfIntervals(h, nm, oi, C.OCI_INTERVAL_DS, C.uint(len(x)))
+	case LOB:
+		ok = C.OCI_BindLob(h, nm, x.handle)
+	case []LOB:
+		if len(x) > 0 {
+			lo := make([]*C.OCI_Lob, len(x))
+			for i := range x {
+				lo[i] = x[i].handle
+			}
+			ok = C.OCI_BindArrayOfLobs(h, nm, (**C.OCI_Lob)(unsafe.Pointer(&lo[0])), x[0].Type(), C.uint(len(x)))
+		}
+	case File:
+		ok = C.OCI_BindFile(h, nm, x.handle)
+	case []File:
+		if len(x) > 0 {
+			fi := make([]*C.OCI_File, len(x))
+			for i := range x {
+				fi[i] = x[i].handle
+			}
+			ok = C.OCI_BindArrayOfFiles(h, nm, (**C.OCI_File)(unsafe.Pointer(&fi[0])), x[0].Type(), C.uint(len(x)))
+		}
+	case Object:
+		ok = C.OCI_BindObject(h, nm, x.handle)
+	case []Object:
+		if len(x) > 0 {
+			ob := make([]*C.OCI_Object, len(x))
+			for i := range x {
+				ob[i] = x[i].handle
+			}
+			ok = C.OCI_BindArrayOfObjects(h, nm, (**C.OCI_Object)(unsafe.Pointer(&ob[0])), x[0].Type(), C.uint(len(x)))
+		}
+	case Coll:
+		ok = C.OCI_BindColl(h, nm, x.handle)
+	case []Coll:
+		if len(x) > 0 {
+			co := make([]*C.OCI_Coll, len(x))
+			for i := range x {
+				co[i] = x[i].handle
+			}
+			ok = C.OCI_BindArrayOfColls(h, nm, (**C.OCI_Coll)(unsafe.Pointer(&co[0])), x[0].Type(), C.uint(len(x)))
+		}
+	case Ref:
+		ok = C.OCI_BindRef(h, nm, x.handle)
+	case []Ref:
+		if len(x) > 0 {
+			re := make([]*C.OCI_Ref, len(x))
+			for i := range x {
+				re[i] = x[i].handle
+			}
+			ok = C.OCI_BindArrayOfRefs(h, nm, (**C.OCI_Ref)(unsafe.Pointer(&re[0])), x[0].Type(), C.uint(len(x)))
+		}
+	case RefCursor:
+		ok = C.OCI_BindStatement(h, nm, x.handle)
+	case Long:
+		ok = C.OCI_BindLong(h, nm, x.handle, x.Len())
 	default:
 		return fmt.Errorf("BindName(%s): unknown type %T", name, value)
 	}
@@ -246,4 +320,18 @@ Outer:
 		return getLastErr()
 	}
 	return nil
+}
+
+func durationAsDays(d time.Duration) (days, hours, minutes, seconds, milliseconds int) {
+	ns := d.Nanoseconds()
+	days = int(ns / int64(time.Hour) / 24)
+	ns -= int64(days) * int64(time.Hour) * 240
+	hours = int(ns / int64(time.Hour))
+	ns -= int64(hours) * int64(time.Hour)
+	minutes = int(ns / int64(time.Minute))
+	ns -= int64(minutes) * int64(time.Minute)
+	seconds = int(ns / int64(time.Second))
+	ns -= int64(seconds) * int64(time.Second)
+	milliseconds = int(ns / int64(time.Millisecond))
+	return
 }

@@ -129,12 +129,7 @@ func (s stmt) Close() error {
 
 // number of input parameters
 func (s stmt) NumInput() int {
-	names, err := s.st.GetBindNames()
-	if err != nil {
-		log.Printf("error getting bind names of %p: %s", s.st, err)
-		return -1
-	}
-	return len(names)
+	return s.st.BindCount()
 }
 
 type rowsRes struct {
@@ -160,7 +155,7 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 		return nil, filterErr(err)
 	}
 
-	rs, err := s.st.Resultset()
+	rs, err := s.st.Results()
 	if err != nil {
 		return nil, err
 	}
@@ -195,21 +190,20 @@ func (r rowsRes) Columns() []string {
 // closes the resultset
 func (r rowsRes) Close() error {
 	var err error
-	if r.st != nil {
-		debug("CLOSEing result %p", r.st)
-		err = r.st.Close()
-		r.st = nil
+	if r.rs != nil {
+		debug("CLOSEing result %p", r.rs)
+		err = r.rs.Close()
+		r.rs = nil
 	}
 	return err
 }
 
 // DATE, DATETIME, TIMESTAMP are treated as they are in Local time zone
 func (r rowsRes) Next(dest []driver.Value) error {
-	row := (*[]interface{})(unsafe.Pointer(&dest))
-	// log.Printf("FetcOneInto(%p %+v len=%d) %T", row, *row, len(*row), *row)
-	err := r.st.FetchOneInto(*row...)
-	debug("fetched row=%p %+v (len=%d) err=%s", row, *row, len(*row), err)
-	return err
+	if err := r.rs.Next(); err != nil {
+		return err
+	}
+	return r.rs.FetchInto(dest)
 }
 
 // Driver implements a Driver
