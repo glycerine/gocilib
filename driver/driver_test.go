@@ -19,12 +19,7 @@ package driver
 import (
 	"database/sql"
 	"flag"
-	"io"
-	"io/ioutil"
-	"strings"
 	"testing"
-
-	"github.com/tgulacsi/gocilib"
 )
 
 var fDsn = flag.String("dsn", "", "Oracle DSN")
@@ -38,6 +33,9 @@ func TestSimple(t *testing.T) {
 		dst interface{}
 	)
 	for i, qry := range []string{
+		"SELECT 1 FROM DUAL",
+		"SELECT 12.34 FROM DUAL",
+		"SELECT 1234567890123456789012 FROM DUAL",
 		"SELECT ROWNUM FROM DUAL",
 		"SELECT LOG(10, 2) FROM DUAL",
 		"SELECT 'árvíztűrő tükörfúrógép' FROM DUAL",
@@ -49,24 +47,9 @@ func TestSimple(t *testing.T) {
 		row := conn.QueryRow(qry)
 		if err = row.Scan(&dst); err != nil {
 			t.Errorf("%d. error with %q test: %s", i, qry, err)
+			t.FailNow()
 		}
 		t.Logf("%d. %q result: %#v", i, qry, dst)
-		if strings.Index(qry, " TO_CLOB(") >= 0 {
-			var b []byte
-			var e error
-			if true {
-				r := dst.(io.Reader)
-				b, e = ioutil.ReadAll(r)
-			} else {
-				clob := dst.(*oracle.ExternalLobVar)
-				b, e = clob.ReadAll()
-			}
-			if e != nil {
-				t.Errorf("error reading clob (%v): %s", dst, e)
-			} else {
-				t.Logf("clob=%s", b)
-			}
-		}
 	}
 
 	qry := "SELECT rn, CHR(rn) FROM (SELECT ROWNUM rn FROM all_objects WHERE ROWNUM < 256)"
@@ -122,7 +105,7 @@ func getConnection(t *testing.T) *sql.DB {
 		return testDB
 	}
 	flag.Parse()
-	if testDB, err = sql.Open("goracle", *fDsn); err != nil {
+	if testDB, err = sql.Open("gocilib", *fDsn); err != nil {
 		t.Fatalf("error connecting to %q: %s", *fDsn, err)
 	}
 	return testDB

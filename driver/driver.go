@@ -25,7 +25,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"github.com/tgulacsi/gocilib"
 )
@@ -48,6 +47,7 @@ type stmt struct {
 
 // filterErr filters the error, returns driver.ErrBadConn if appropriate
 func filterErr(err error) error {
+	//log.Printf("filterErr(%v)", err)
 	if oraErr, ok := err.(*gocilib.Error); ok {
 		switch oraErr.Code {
 		case 115, 451, 452, 609, 1090, 1092, 1073, 3113, 3114, 3135, 3136, 12153, 12161, 12170, 12224, 12230, 12233, 12510, 12511, 12514, 12518, 12526, 12527, 12528, 12539: //connection errors - try again!
@@ -75,6 +75,7 @@ func (c conn) Prepare(query string) (driver.Stmt, error) {
 		query = strings.Join(q2, "")
 	}
 	debug("%p.Prepare(%s)", st, query)
+	//log.Printf("%#v.Prepare(%q)", st, query)
 	err = st.Prepare(query)
 	if err != nil {
 		return nil, filterErr(err)
@@ -149,17 +150,19 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 	//time.Time
 
 	var err error
-	a := (*[]interface{})(unsafe.Pointer(&args))
-	debug("%p.run(%s, %v)", s.st, s.statement, *a)
+	//log.Printf("%#v.BindExecute(%#v, %#v)", s.st, s.statement, args)
 	if err = s.st.BindExecute(s.statement, args, nil); err != nil {
 		return nil, filterErr(err)
 	}
 
 	rs, err := s.st.Results()
+	//log.Printf("%#v.Results(): %#v, %v", s.st, rs, err)
 	if err != nil {
 		return nil, err
 	}
-	return &rowsRes{rs: rs, cols: rs.Columns()}, nil
+	rr := &rowsRes{rs: rs, cols: rs.Columns()}
+	//log.Printf("%#v.run(%#v): %#v", s, args, rr)
+	return rr, nil
 }
 
 func (s stmt) Exec(args []driver.Value) (driver.Result, error) {
@@ -175,6 +178,7 @@ func (r rowsRes) LastInsertId() (int64, error) {
 }
 
 func (r rowsRes) RowsAffected() (int64, error) {
+	//log.Printf("%#v.RowsAffected(): %d", r.rs, r.rs.RowsAffected())
 	return r.rs.RowsAffected(), nil
 }
 
@@ -203,7 +207,9 @@ func (r rowsRes) Next(dest []driver.Value) error {
 	if err := r.rs.Next(); err != nil {
 		return err
 	}
-	return r.rs.FetchInto(dest)
+	err := r.rs.FetchInto(dest)
+	//log.Printf("%#v.FetchInto(%#v): %v", r.rs, dest, err)
+	return err
 }
 
 // Driver implements a Driver

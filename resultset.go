@@ -22,7 +22,6 @@ import "C"
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"time"
 	"unsafe"
 )
@@ -60,7 +59,10 @@ func (rs *Resultset) RowsAffected() int64 {
 }
 
 func (rs *Resultset) FetchInto(row []driver.Value) error {
+	//log.Printf("%#v.FetchInto(%#v)", rs, row)
+	var err error
 	for i, v := range row {
+		//log.Printf("%d: %#v (%T)", i, v, v)
 		isNull := C.OCI_IsNull(rs.handle, C.uint(i+1)) == C.TRUE
 		switch x := v.(type) {
 		case int64:
@@ -69,31 +71,35 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 			} else {
 				row[i] = int64(C.OCI_GetBigInt(rs.handle, C.uint(i+1)))
 			}
+		case *int64:
+			if isNull {
+				row[i] = nil
+			} else {
+				*x = int64(C.OCI_GetBigInt(rs.handle, C.uint(i+1)))
+			}
 		case float64:
 			if isNull {
 				row[i] = 0
 			} else {
 				row[i] = C.OCI_GetDouble(rs.handle, C.uint(i+1))
 			}
+		case *float64:
+			if isNull {
+				row[i] = nil
+			} else {
+				*x = float64(C.OCI_GetDouble(rs.handle, C.uint(i+1)))
+			}
 		case bool:
 			if isNull {
 				row[i] = false
 				continue
 			}
-			s := C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
-			if len(s) == 0 {
-				row[i] = false
+			row[i] = stringToBool(C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1))))
+		case *bool:
+			if isNull {
+				row[i] = nil
 			} else {
-				switch row[0] {
-				case 'I', 'i', 't', 'T', 'Y', 'y':
-					row[i] = true
-				case 'n', 'N', 'f', 'F', '0':
-					row[i] = false
-				case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-					row[i] = true
-				default:
-					row[i] = false
-				}
+				*x = stringToBool(C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1))))
 			}
 		case []byte:
 			if isNull {
@@ -102,28 +108,46 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 			}
 			n := C.OCI_GetRaw(rs.handle, C.uint(i+1), unsafe.Pointer(&x[0]), C.uint(cap(x)))
 			row[i] = x[:n]
+		case *[]byte:
+			if isNull {
+				row[i] = nil
+			} else {
+				n := C.OCI_GetRaw(rs.handle, C.uint(i+1), unsafe.Pointer(&(*x)[0]), C.uint(cap(*x)))
+				*x = (*x)[:n]
+			}
 		case string:
 			if isNull {
 				row[i] = ""
 				continue
 			}
-			row[i] = C.OCI_GetString(rs.handle, C.uint(i+1))
+			row[i] = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+		case *string:
+			if isNull {
+				row[i] = nil
+			} else {
+				*x = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+			}
 		case time.Time:
 			if isNull {
 				row[i] = zeroTime
 				continue
 			}
-			od := C.OCI_GetDate(rs.handle, C.uint(i+1))
-			var y, m, d, H, M, S C.int
-			if C.OCI_DateGetDateTime(od, &y, &m, &d, &H, &M, &S) != C.TRUE {
-				return getLastErr()
+			row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, C.uint(i+1)))
+		case *time.Time:
+			if isNull {
+				row[i] = nil
+			} else {
+				*x, err = ociDateToTime(C.OCI_GetDate(rs.handle, C.uint(i+1)))
 			}
-			row[i] = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
 		default:
-			return fmt.Errorf("FetchInto(%d.): unknown type %T", i, v)
+			//err = fmt.Errorf("FetchInto(%d.): unknown type %T", i, x)
+			row[i] = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+		}
+		if err != nil {
+			break
 		}
 	}
-	return nil
+	return err
 }
 
 type ColType uint8
@@ -173,10 +197,10 @@ type ColDesc struct {
 
 func (rs *Resultset) Columns() []ColDesc {
 	if rs.cols == nil {
-		colCount := C.OCI_GetColumnCount(rs.handle)
-		rs.cols = make([]ColDesc, int(colCount))
-		for i := C.uint(1); i <= colCount; i++ {
-			c := C.OCI_GetColumn(rs.handle, i)
+		colCount := int(C.OCI_GetColumnCount(rs.handle))
+		rs.cols = make([]ColDesc, colCount)
+		for i := range rs.cols {
+			c := C.OCI_GetColumn(rs.handle, C.uint(i+1))
 			rs.cols[i].Name = C.GoString(C.OCI_ColumnGetName(c))
 			rs.cols[i].Type = ColType(C.OCI_ColumnGetType(c))
 			rs.cols[i].TypeName = C.GoString(C.OCI_ColumnGetSQLType(c))
@@ -186,5 +210,31 @@ func (rs *Resultset) Columns() []ColDesc {
 			rs.cols[i].Nullable = C.OCI_ColumnGetNullable(c) == C.TRUE
 		}
 	}
+	//log.Printf("rs.cols[%d]=%#v", len(rs.cols), rs.cols)
 	return rs.cols
+}
+
+func stringToBool(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	switch s[0] {
+	case 'I', 'i', 't', 'T', 'Y', 'y':
+		return true
+	case 'n', 'N', 'f', 'F', '0':
+		return false
+	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return true
+	}
+	return false
+}
+
+func ociDateToTime(od *C.OCI_Date) (time.Time, error) {
+	var t time.Time
+	var y, m, d, H, M, S C.int
+	if C.OCI_DateGetDateTime(od, &y, &m, &d, &H, &M, &S) != C.TRUE {
+		return t, getLastErr()
+	}
+	t = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
+	return t, nil
 }
