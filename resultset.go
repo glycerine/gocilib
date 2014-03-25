@@ -24,6 +24,8 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 	"unsafe"
 )
@@ -150,8 +152,37 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 			}
 			switch cols[i].Type {
 			case ColNumeric:
-				// FIXME(tgulacsi): switch on scale and precision!
-				row[i] = C.OCI_GetBigInt(rs.handle, ui)
+				var s string
+				if cols[i].Scale == 0 && cols[i].Scale == 0 { // FIXME(tgulacsi): how can be scale=prec=0 ?
+					s = C.GoString(C.OCI_GetString(rs.handle, ui))
+					j := strings.Index(s, ".")
+					neg := s[0] == '-'
+					if j >= 0 {
+						cols[i].Scale = len(s) - j
+						cols[i].Precision = len(s) - 1
+					} else {
+						cols[i].Precision = len(s)
+					}
+					if neg {
+						cols[i].Precision--
+					}
+				}
+				if cols[i].Scale == 0 { // integer
+					//fmt.Printf("col[%d]=%+v\n", i, cols[i])
+					if cols[i].Precision <= 19 {
+						row[i] = C.OCI_GetBigInt(rs.handle, ui)
+					} else {
+						if s == "" {
+							s = C.GoString(C.OCI_GetString(rs.handle, ui))
+						}
+						var ok bool
+						if row[i], ok = big.NewInt(0).SetString(s, 10); false && !ok {
+							row[i] = s
+						}
+					}
+				} else {
+					row[i] = float64(C.OCI_GetDouble(rs.handle, ui))
+				}
 			case ColDate:
 				row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
 			case ColTimestamp:
