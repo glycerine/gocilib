@@ -60,9 +60,6 @@ func (co Coll) Type() *C.OCI_TypeInfo {
 	return C.OCI_CollGetTypeInfo(co.handle)
 }
 
-type RefCursor struct {
-	handle *C.OCI_Statement
-}
 type Long struct {
 	handle *C.OCI_Long
 }

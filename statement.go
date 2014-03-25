@@ -26,6 +26,7 @@ import "C"
 import (
 	"database/sql/driver"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 	"unsafe"
@@ -309,11 +310,15 @@ Outer:
 			}
 			ok = C.OCI_BindArrayOfRefs(h, nm, (**C.OCI_Ref)(unsafe.Pointer(&re[0])), x[0].Type(), C.uint(len(x)))
 		}
-	case RefCursor:
+	case Statement:
 		ok = C.OCI_BindStatement(h, nm, x.handle)
 	case Long:
 		ok = C.OCI_BindLong(h, nm, x.handle, x.Len())
 	default:
+		v := reflect.ValueOf(value)
+		if v.Kind() == reflect.Ptr {
+			return stmt.BindName(name, v.Elem())
+		}
 		return fmt.Errorf("BindName(%s): unknown type %T", name, value)
 	}
 	if ok != C.TRUE {

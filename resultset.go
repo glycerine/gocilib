@@ -21,7 +21,9 @@ package gocilib
 import "C"
 
 import (
+	"bytes"
 	"database/sql/driver"
+	"fmt"
 	"time"
 	"unsafe"
 )
@@ -60,59 +62,61 @@ func (rs *Resultset) RowsAffected() int64 {
 
 func (rs *Resultset) FetchInto(row []driver.Value) error {
 	//log.Printf("%#v.FetchInto(%#v)", rs, row)
+	cols := rs.Columns()
 	var err error
 	for i, v := range row {
+		ui := C.uint(i + 1)
 		//log.Printf("%d: %#v (%T)", i, v, v)
-		isNull := C.OCI_IsNull(rs.handle, C.uint(i+1)) == C.TRUE
+		isNull := C.OCI_IsNull(rs.handle, ui) == C.TRUE
 		switch x := v.(type) {
 		case int64:
 			if isNull {
 				row[i] = 0
 			} else {
-				row[i] = int64(C.OCI_GetBigInt(rs.handle, C.uint(i+1)))
+				row[i] = int64(C.OCI_GetBigInt(rs.handle, ui))
 			}
 		case *int64:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = int64(C.OCI_GetBigInt(rs.handle, C.uint(i+1)))
+				*x = int64(C.OCI_GetBigInt(rs.handle, ui))
 			}
 		case float64:
 			if isNull {
 				row[i] = 0
 			} else {
-				row[i] = C.OCI_GetDouble(rs.handle, C.uint(i+1))
+				row[i] = C.OCI_GetDouble(rs.handle, ui)
 			}
 		case *float64:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = float64(C.OCI_GetDouble(rs.handle, C.uint(i+1)))
+				*x = float64(C.OCI_GetDouble(rs.handle, ui))
 			}
 		case bool:
 			if isNull {
 				row[i] = false
 				continue
 			}
-			row[i] = stringToBool(C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1))))
+			row[i] = stringToBool(C.GoString(C.OCI_GetString(rs.handle, ui)))
 		case *bool:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = stringToBool(C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1))))
+				*x = stringToBool(C.GoString(C.OCI_GetString(rs.handle, ui)))
 			}
 		case []byte:
 			if isNull {
 				row[i] = x[:0]
 				continue
 			}
-			n := C.OCI_GetRaw(rs.handle, C.uint(i+1), unsafe.Pointer(&x[0]), C.uint(cap(x)))
+			n := C.OCI_GetRaw(rs.handle, ui, unsafe.Pointer(&x[0]), C.uint(cap(x)))
 			row[i] = x[:n]
 		case *[]byte:
 			if isNull {
 				row[i] = nil
 			} else {
-				n := C.OCI_GetRaw(rs.handle, C.uint(i+1), unsafe.Pointer(&(*x)[0]), C.uint(cap(*x)))
+				n := C.OCI_GetRaw(rs.handle, ui, unsafe.Pointer(&(*x)[0]), C.uint(cap(*x)))
 				*x = (*x)[:n]
 			}
 		case string:
@@ -120,28 +124,50 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				row[i] = ""
 				continue
 			}
-			row[i] = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+			row[i] = C.GoString(C.OCI_GetString(rs.handle, ui))
 		case *string:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+				*x = C.GoString(C.OCI_GetString(rs.handle, ui))
 			}
 		case time.Time:
 			if isNull {
 				row[i] = zeroTime
 				continue
 			}
-			row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, C.uint(i+1)))
+			row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
 		case *time.Time:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x, err = ociDateToTime(C.OCI_GetDate(rs.handle, C.uint(i+1)))
+				*x, err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
 			}
 		default:
-			//err = fmt.Errorf("FetchInto(%d.): unknown type %T", i, x)
-			row[i] = C.GoString(C.OCI_GetString(rs.handle, C.uint(i+1)))
+			if isNull {
+				row[i] = nil
+				continue
+			}
+			switch cols[i].Type {
+			case ColNumeric:
+				// FIXME(tgulacsi): switch on scale and precision!
+				row[i] = C.OCI_GetBigInt(rs.handle, ui)
+			case ColDate:
+				row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
+			case ColTimestamp:
+				row[i], err = ociTimestampToTime(C.OCI_GetTimestamp(rs.handle, ui))
+			case ColInterval:
+				row[i], err = ociIntervalToDuration(C.OCI_GetInterval(rs.handle, ui))
+			case ColRaw:
+				b := make([]byte, cols[i].InternalSize)
+				n := C.OCI_GetRaw(rs.handle, ui, unsafe.Pointer(&b[0]), C.uint(cap(b)))
+				row[i] = b[:n]
+			case ColCursor:
+				row[i] = &Statement{handle: C.OCI_GetStatement(rs.handle, ui)}
+			default:
+				//err = fmt.Errorf("FetchInto(%d.): unknown type %T", i, x)
+				row[i] = C.GoString(C.OCI_GetString(rs.handle, ui))
+			}
 		}
 		if err != nil {
 			break
@@ -237,4 +263,48 @@ func ociDateToTime(od *C.OCI_Date) (time.Time, error) {
 	}
 	t = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
 	return t, nil
+}
+
+func ociTimestampToTime(od *C.OCI_Timestamp) (time.Time, error) {
+	var t time.Time
+	var y, m, d, H, M, S, F, oh, om C.int
+	zone := time.Local
+	if C.OCI_TimestampGetTimeZoneOffset(od, &oh, &om) == C.TRUE {
+		var name string
+		b := make([]byte, 32)
+		if C.OCI_TimestampGetTimeZoneName(od, C.int(cap(b)), (*C.char)(unsafe.Pointer(&b[0]))) == C.TRUE {
+			i := bytes.IndexByte(b, 0)
+			if i >= 0 {
+				b = b[:i]
+			}
+			name = string(b)
+		}
+		if name == "" {
+			name = fmt.Sprintf("%d:%d", oh, om)
+		}
+		zone = time.FixedZone(name, int(oh*60+om)*60)
+	}
+	if C.OCI_TimestampGetDateTime(od, &y, &m, &d, &H, &M, &S, &F) != C.TRUE {
+		return t, getLastErr()
+	}
+	t = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(time.Duration(F)*time.Millisecond*100), zone)
+	return t, nil
+}
+
+func ociIntervalToDuration(od *C.OCI_Interval) (time.Duration, error) {
+	if C.OCI_IntervalGetType(od) == C.OCI_INTERVAL_YM {
+		var y, m C.int
+		if C.OCI_IntervalGetYearMonth(od, &y, &m) != C.TRUE {
+			return 0, getLastErr()
+		}
+		return time.Duration(y*365+m*30) * 24 * time.Hour, nil
+	}
+	var d, H, M, S, F C.int
+	if C.OCI_IntervalGetDaySecond(od, &d, &H, &M, &S, &F) != C.TRUE {
+		return 0, getLastErr()
+	}
+	return (time.Duration(d*24+H)*time.Hour +
+		time.Duration(M)*time.Minute +
+		time.Duration(S)*time.Second +
+		time.Duration(F*100)*time.Millisecond), nil
 }
