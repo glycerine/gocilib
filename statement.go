@@ -35,8 +35,9 @@ import (
 var BindArraySize = C.uint(1000)
 
 type Statement struct {
-	handle *C.OCI_Statement
-	verb   string
+	handle    *C.OCI_Statement
+	verb      string
+	bindCount int
 }
 
 func (conn *Connection) NewStatement() (*Statement, error) {
@@ -62,7 +63,7 @@ func (stmt *Statement) Close() error {
 			return getLastErr()
 		}
 		stmt.handle = nil
-		stmt.verb = ""
+		stmt.verb, stmt.bindCount = "", 0
 	}
 	return nil
 }
@@ -71,7 +72,8 @@ func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	stmt.verb = ""
+	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return nil
 }
 
@@ -79,7 +81,8 @@ func (stmt *Statement) Execute(qry string) error {
 	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	stmt.verb = ""
+	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return nil
 }
 
@@ -115,9 +118,6 @@ func (stmt *Statement) BindExecute(
 }
 
 func (stmt *Statement) Verb() string {
-	if stmt.verb == "" {
-		stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
-	}
 	return stmt.verb
 }
 
@@ -131,7 +131,7 @@ func (stmt *Statement) IsDDL() bool {
 }
 
 func (stmt *Statement) BindCount() int {
-	return int(C.OCI_GetBindCount(stmt.handle))
+	return stmt.bindCount
 }
 
 func (stmt *Statement) RowsAffected() int64 {

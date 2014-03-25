@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -46,22 +47,22 @@ type stmt struct {
 }
 
 // filterErr filters the error, returns driver.ErrBadConn if appropriate
-func filterErr(err error) error {
+func filterErr(err *error) error {
 	//log.Printf("filterErr(%v)", err)
-	if oraErr, ok := err.(*gocilib.Error); ok {
+	if oraErr, ok := (*err).(*gocilib.Error); ok {
 		switch oraErr.Code {
 		case 115, 451, 452, 609, 1090, 1092, 1073, 3113, 3114, 3135, 3136, 12153, 12161, 12170, 12224, 12230, 12233, 12510, 12511, 12514, 12518, 12526, 12527, 12528, 12539: //connection errors - try again!
 			return driver.ErrBadConn
 		}
 	}
-	return err
+	return *err
 }
 
 // Prepare the query for execution, return a prepared statement and error
 func (c conn) Prepare(query string) (driver.Stmt, error) {
 	st, err := c.cx.NewStatement()
-	if err != nil {
-		return nil, err
+	if filterErr(&err) != nil {
+		return nil, fmt.Errorf("Prepare[creating statement]: %v", err)
 	}
 	if strings.Index(query, ":1") < 0 && strings.Index(query, "?") >= 0 {
 		q := strings.Split(query, "?")
@@ -73,12 +74,12 @@ func (c conn) Prepare(query string) (driver.Stmt, error) {
 			q2 = append(q2, q[i])
 		}
 		query = strings.Join(q2, "")
+		//log.Printf("%#v.Prepare(%q)", st, query)
 	}
 	debug("%p.Prepare(%s)", st, query)
-	//log.Printf("%#v.Prepare(%q)", st, query)
 	err = st.Prepare(query)
-	if err != nil {
-		return nil, filterErr(err)
+	if filterErr(&err) != nil {
+		return nil, fmt.Errorf("Prepare query: %v", err)
 	}
 	return stmt{st: st, statement: query}, nil
 }
@@ -130,7 +131,29 @@ func (s stmt) Close() error {
 
 // number of input parameters
 func (s stmt) NumInput() int {
-	return s.st.BindCount()
+	bindCount := s.st.BindCount()
+	// bindCount is reasonable only before Bind - i.e. after an Execute
+	if bindCount > 0 {
+		return bindCount
+	}
+	state, length := 0, 0
+	for _, r := range s.statement {
+		if state == 0 {
+			if r == ':' {
+				state++
+			}
+		} else {
+			if '0' <= r && r <= '9' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || r == '_' {
+				length++
+				continue
+			}
+			if length > 0 {
+				bindCount++
+			}
+			state, length = 0, 0
+		}
+	}
+	return bindCount
 }
 
 type rowsRes struct {
@@ -151,13 +174,13 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 
 	var err error
 	//log.Printf("%#v.BindExecute(%#v, %#v)", s.st, s.statement, args)
-	if err = s.st.BindExecute(s.statement, args, nil); err != nil {
-		return nil, filterErr(err)
+	if err = s.st.BindExecute(s.statement, args, nil); filterErr(&err) != nil {
+		return nil, err
 	}
 
 	rs, err := s.st.Results()
 	//log.Printf("%#v.Results(): %#v, %v", s.st, rs, err)
-	if err != nil {
+	if filterErr(&err) != nil {
 		return nil, err
 	}
 	rr := &rowsRes{rs: rs, cols: rs.Columns()}
