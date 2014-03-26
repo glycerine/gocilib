@@ -88,9 +88,9 @@ func (stmt *Statement) BindExecute(
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {
-		return getLastErr()
-	}
+	//if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {
+	//	return getLastErr()
+	//}
 	if len(arrayArgs) > 0 {
 		for i, a := range arrayArgs {
 			if err := stmt.BindPos(i+1, a); err != nil {

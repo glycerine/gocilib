@@ -19,6 +19,7 @@ package driver
 import (
 	"database/sql"
 	"flag"
+	"strconv"
 	"testing"
 )
 
@@ -105,6 +106,13 @@ func TestDDL(t *testing.T) {
 	_, err := conn.Exec("CREATE TABLE TST_ddl (key VARCHAR2(3), value VARCHAR2(1000))")
 	if err != nil {
 		t.Errorf("error creating table TST_ddl: %v", err)
+	}
+
+	for i, val := range [][]byte{[]byte("bob"), []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}} {
+		if _, err := conn.Exec("INSERT INTO TST_ddl (key, value) VALUES (?, ?)", strconv.Itoa(i), val); err != nil {
+			t.Errorf("error inserting into TST_ddl(%d, %q): %v", i, val, err)
+			t.FailNow()
+		}
 	}
 }
 
