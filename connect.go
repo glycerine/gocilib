@@ -138,12 +138,10 @@ func (conn *Connection) Close() error {
 
 func getLastErr() error {
 	ociErr := C.OCI_GetLastError()
-	e := Error{Code: int(C.OCI_ErrorGetOCICode(ociErr)),
-		Text: C.GoString(C.OCI_ErrorGetString(ociErr))}
-	if e.Code == 0 && e.Text == "" {
-		return nil
+	return &Error{
+		Code: int(C.OCI_ErrorGetOCICode(ociErr)),
+		Text: C.GoString(C.OCI_ErrorGetString(ociErr)),
 	}
-	return &e
 }
 
 type Error struct {

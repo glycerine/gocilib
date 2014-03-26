@@ -29,8 +29,8 @@ import (
 	"unsafe"
 )
 
-// getBindInfo returns the bind names, using *C.OCIStmt handle.
-func getBindInfo(handle unsafe.Pointer, dst []string) ([]string, error) {
+// getBindInfo returns the bind names, using *C.OCIStmt and *C.OCIError handles.
+func getBindInfo(stmtHandle, errHandle unsafe.Pointer, dst []string) ([]string, error) {
 	var foundElements C.sb4
 	numElements := 8
 
@@ -54,8 +54,8 @@ func getBindInfo(handle unsafe.Pointer, dst []string) ([]string, error) {
 		bindHandles := make([](*C.OCIBind), numElements)
 
 		// get the bind information
-		status := C.OCIStmtGetBindInfo(handle,
-			cur.environment.errorHandle, C.ub4(numElements), 1, &foundElements,
+		status := C.OCIStmtGetBindInfo((*C.OCIStmt)(stmtHandle),
+			(*C.OCIError)(errHandle), C.ub4(numElements), 1, &foundElements,
 			(**C.OraText)(unsafe.Pointer(&bindNames[0])),
 			(*C.ub1)(&bindNameLengths[0]),
 			(**C.OraText)(&indicatorNames[0]), (*C.ub1)(&indicatorNameLengths[0]),
@@ -64,25 +64,26 @@ func getBindInfo(handle unsafe.Pointer, dst []string) ([]string, error) {
 			// FIXME(tgulacsi): check that getLastErr works here
 			return nil, getLastErr()
 		}
-		if foundElements >= 0 {
-			break
-		}
-		// try again
-		numElements = -foundElements
-	}
-
-	// create the list which is to be returned
-	if dst != nil {
-		dst = dst[:0]
-	} else {
-		dst = make([]string, 0, foundElements)
-	}
-	// process the bind information returned
-	for i := 0; i < int(foundElements); i++ {
-		if duplicate[i] > 0 {
+		if foundElements < 0 {
+			// try again
+			numElements = -int(foundElements)
 			continue
 		}
-		dst = append(dst, string(bindNames[i][:int(bindNameLengths[i])]))
+
+		// create the list which is to be returned
+		if dst != nil {
+			dst = dst[:0]
+		} else {
+			dst = make([]string, 0, foundElements)
+		}
+		// process the bind information returned
+		for i := 0; i < int(foundElements); i++ {
+			if duplicate[i] > 0 {
+				continue
+			}
+			dst = append(dst, C.GoStringN((*C.char)(unsafe.Pointer(bindNames[i])), C.int(bindNameLengths[i])))
+		}
+		break
 	}
 	return dst, nil
 }

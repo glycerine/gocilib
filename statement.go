@@ -23,11 +23,6 @@ import "C"
 
 import (
 	"database/sql/driver"
-	"fmt"
-	"reflect"
-	"strconv"
-	"time"
-	"unsafe"
 )
 
 var BindArraySize = C.uint(1000)
@@ -128,10 +123,18 @@ func (stmt *Statement) IsDDL() bool {
 	}
 }
 
-func (stmt *Statement) BindCount() int {
-	if stmt.Verb() == "" { // haven't been Prepared/Executed yet
+func (stmt *Statement) BindCount() (int, error) {
+	if stmt.bindCount <= 0 && stmt.Verb() == "" { // haven't been Prepared/Executed yet
+		names, err := getBindInfo(
+			C.OCI_HandleGetStatement(stmt.handle),
+			C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)),
+			nil)
+		if err != nil {
+			return -1, err
+		}
+		stmt.bindCount = len(names)
 	}
-	return stmt.bindCount
+	return stmt.bindCount, nil
 }
 
 func (stmt *Statement) RowsAffected() int64 {

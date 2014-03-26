@@ -52,7 +52,11 @@ func filterErr(err *error) error {
 	if oraErr, ok := (*err).(*gocilib.Error); ok {
 		switch oraErr.Code {
 		case 115, 451, 452, 609, 1090, 1092, 1073, 3113, 3114, 3135, 3136, 12153, 12161, 12170, 12224, 12230, 12233, 12510, 12511, 12514, 12518, 12526, 12527, 12528, 12539: //connection errors - try again!
-			return driver.ErrBadConn
+			*err = driver.ErrBadConn
+		case 0:
+			if oraErr.Text == "" {
+				*err = nil
+			}
 		}
 	}
 	return *err
@@ -131,28 +135,10 @@ func (s stmt) Close() error {
 
 // number of input parameters
 func (s stmt) NumInput() int {
-	bindCount := s.st.BindCount()
-	// bindCount is reasonable only after Bind - i.e. after an Execute
-	if bindCount > 0 || s.statement == "" {
-		return bindCount
-	}
-	state, length := 0, 0
-	for _, r := range s.statement {
-		if state == 0 {
-			if r == ':' {
-				state++
-			}
-		} else {
-			if '0' <= r && r <= '9' || 'a' <= r && r <= 'z' ||
-				'A' <= r && r <= 'Z' || r == '_' {
-				length++
-				continue
-			}
-			if length > 0 {
-				bindCount++
-			}
-			state, length = 0, 0
-		}
+	bindCount, err := s.st.BindCount()
+	if err != nil {
+		log.Printf("ERROR getting bind count: %v", err)
+		return 0
 	}
 	return bindCount
 }
