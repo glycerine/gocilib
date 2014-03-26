@@ -97,6 +97,17 @@ func TestPrepared(t *testing.T) {
 	defer rows.Close()
 }
 
+func TestDDL(t *testing.T) {
+	conn := getConnection(t)
+	defer conn.Close()
+	conn.Exec("DROP TABLE TST_ddl")
+	defer conn.Exec("DROP TABLE TST_ddl")
+	_, err := conn.Exec("CREATE TABLE TST_ddl (key VARCHAR2(3), value VARCHAR2(1000))")
+	if err != nil {
+		t.Errorf("error creating table TST_ddl: %v", err)
+	}
+}
+
 var testDB *sql.DB
 
 func getConnection(t *testing.T) *sql.DB {

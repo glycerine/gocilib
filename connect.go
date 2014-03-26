@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 //SplitDSN splits username/password@sid
@@ -58,8 +59,11 @@ type Connection struct {
 	handle *C.OCI_Connection
 }
 
-var connNumMu sync.Mutex
-var connNum int
+var (
+	connNumMu sync.Mutex
+	connNum   int
+	cleanupT  *time.Timer
+)
 
 func NewConnection(user, passwd, sid string) (*Connection, error) {
 	initialize()
@@ -125,7 +129,8 @@ func (conn *Connection) Close() error {
 	connNumMu.Lock()
 	connNum--
 	if connNum <= 0 {
-		C.OCI_Cleanup()
+		// TODO(tgulacsi): use cleanupT to cleanup only after 30s
+		//	C.OCI_Cleanup()
 	}
 	connNumMu.Unlock()
 	return err
@@ -133,8 +138,12 @@ func (conn *Connection) Close() error {
 
 func getLastErr() error {
 	ociErr := C.OCI_GetLastError()
-	return &Error{int(C.OCI_ErrorGetOCICode(ociErr)),
-		C.GoString(C.OCI_ErrorGetString(ociErr))}
+	e := Error{Code: int(C.OCI_ErrorGetOCICode(ociErr)),
+		Text: C.GoString(C.OCI_ErrorGetString(ociErr))}
+	if e.Code == 0 && e.Text == "" {
+		return nil
+	}
+	return &e
 }
 
 type Error struct {

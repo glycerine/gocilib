@@ -132,8 +132,8 @@ func (s stmt) Close() error {
 // number of input parameters
 func (s stmt) NumInput() int {
 	bindCount := s.st.BindCount()
-	// bindCount is reasonable only before Bind - i.e. after an Execute
-	if bindCount > 0 {
+	// bindCount is reasonable only after Bind - i.e. after an Execute
+	if bindCount > 0 || s.statement == "" {
 		return bindCount
 	}
 	state, length := 0, 0
@@ -143,7 +143,8 @@ func (s stmt) NumInput() int {
 				state++
 			}
 		} else {
-			if '0' <= r && r <= '9' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || r == '_' {
+			if '0' <= r && r <= '9' || 'a' <= r && r <= 'z' ||
+				'A' <= r && r <= 'Z' || r == '_' {
 				length++
 				continue
 			}
@@ -175,13 +176,13 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 	var err error
 	//log.Printf("%#v.BindExecute(%#v, %#v)", s.st, s.statement, args)
 	if err = s.st.BindExecute(s.statement, args, nil); filterErr(&err) != nil {
-		return nil, err
+		return nil, fmt.Errorf("BindExec%#v %q: %v", args, s.statement, err)
 	}
 
 	rs, err := s.st.Results()
 	//log.Printf("%#v.Results(): %#v, %v", s.st, rs, err)
 	if filterErr(&err) != nil {
-		return nil, err
+		return nil, fmt.Errorf("BindExec %q results: %v", s.statement, err)
 	}
 	rr := &rowsRes{rs: rs, cols: rs.Columns()}
 	//log.Printf("%#v.run(%#v): %#v", s, args, rr)
