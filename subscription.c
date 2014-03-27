@@ -73,6 +73,7 @@ ub4 *payl;
 dvoid *descriptor;
 ub4 mode;
 {
+  ub4 subscriptionID = *((ub4 *)ctx);
   dvoid *change_descriptor =  descriptor;
   ub4   notify_type;
   OCIEnv *envhp;
@@ -115,10 +116,10 @@ ub4 mode;
 
   if (notify_type == OCI_EVENT_SHUTDOWN) {
     printf("Shutdown Notification\n");
-    goNotificationCallback(notify_type, NULL, "", -1);
+    goNotificationCallback(subscriptionID, notify_type, NULL, "", -1);
   } else if (notify_type == OCI_EVENT_DEREG) {
     printf("Registration Removed\n");
-    goNotificationCallback(notify_type, NULL, "", -1);
+    goNotificationCallback(subscriptionID, notify_type, NULL, "", -1);
   }
 
   if (notify_type != OCI_EVENT_OBJCHANGE)
@@ -170,7 +171,7 @@ ub4 mode;
      */
     if (table_op & OCI_OPCODE_ALLROWS) {
       printf("Full Table Invalidation\n");
-      goNotificationCallback(notify_type, table_name, NULL, -1);
+      goNotificationCallback(subscriptionID, notify_type, table_name, NULL, -1);
       continue;
     }
 
@@ -204,7 +205,7 @@ ub4 mode;
       printf ("%s table has been modified in row %s \n", table_name, (rowids+j*ROWID_LENGTH));
       fflush(stdout);
     }
-    goNotificationCallback(notify_type, table_name, rowids, num_rows);
+    goNotificationCallback(subscriptionID, notify_type, table_name, rowids, num_rows);
   }
 
   if (errhp)
@@ -309,59 +310,37 @@ ub4 timeout;
 }
 
 
-sb4 subsRegisterStatement() {
-
-  /* Multiple queries can now be associated with the subscription */
-
-  /* Prepare the statement */
-  checker(errhp,OCIStmtPrepare (stmthp, errhp, query_text1,
-                                strlen(query_text1), OCI_V7_SYNTAX, OCI_DEFAULT));
-  checker(errhp,OCIDefineByPos(stmthp, &defnp1, errhp, 1, (dvoid *)&mgr_id,
-                               sizeof(mgr_id), SQLT_INT, (dvoid *)0,
-                               (ub2 *)0, (ub2 *)0, OCI_DEFAULT));
-  /* Associate the statement with the subscription handle */
-  checker(errhp,OCIAttrSet (stmthp, OCI_HTYPE_STMT, subscrhp, 0,
-                            OCI_ATTR_CHNF_REGHANDLE, errhp));
-
-  /* Execute the statement The execution of the statement  performs the object
-  registration */
-  checker(errhp,OCIStmtExecute (svchp, stmthp, errhp, (ub4) 1, (ub4) 0,
-                 (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL ,
-                 OCI_DEFAULT));
-  printf("Registered query %s\n", query_text1);
-
-  /* Use the same registration for the departments table */
-  checker(errhp,OCIStmtPrepare (stmthp, errhp, query_text2,
-                strlen(query_text2), OCI_V7_SYNTAX, OCI_DEFAULT));
-
-  checker(errhp,OCIDefineByPos(stmthp, &defnp3,
-               errhp, 1, (dvoid *)&dept_id, sizeof(dept_id),
-                SQLT_INT, (dvoid *)0, (ub2 *)0, (ub2 *)0, OCI_DEFAULT));
-  checker(errhp,OCIAttrSet (stmthp, OCI_HTYPE_STMT, subscrhp, 0,
-                     OCI_ATTR_CHNF_REGHANDLE, errhp));
-  checker(errhp,OCIStmtExecute (svchp, stmthp, errhp, (ub4) 1, (ub4) 0,
-                 (CONST OCISnapshot *) NULL, (OCISnapshot *) NULL ,
-                 OCI_DEFAULT));
-  printf("Registered query %s\n", query_text2);
-
-  printf("Waiting for Notifications to arrive\n");
-  /* Wait for notifications to arrive */
-
-  /* Unregister the subscription */
-  checker(errhp,
-           OCISubscriptionUnRegister(svchp,subscrhp, errhp, OCI_DEFAULT));
-
-  /* End the session and detach from the server */
-  checker(errhp, OCISessionEnd(svchp, errhp, usrhp, (ub4) 0));
-  checker(errhp, OCIServerDetach(srvhp, errhp, (ub4) OCI_DEFAULT));
-
-  /* Free all the handles */
-  OCIHandleFree((dvoid *)subscrhp, OCI_HTYPE_SUBSCRIPTION);
-  OCIHandleFree((dvoid *)stmthp, OCI_HTYPE_STMT);
-  OCIHandleFree((dvoid *) srvhp, (ub4) OCI_HTYPE_SERVER);
-  OCIHandleFree((dvoid *) svchp, (ub4) OCI_HTYPE_SVCCTX);
-  OCIHandleFree((dvoid *) usrhp, (ub4) OCI_HTYPE_SESSION);
-  OCIHandleFree((dvoid *) errhp, (ub4) OCI_HTYPE_ERROR);
-  OCIHandleFree((dvoid *) envhp, (ub4) OCI_HTYPE_ENV);
+sb4 subsAddStatement(errhp, subscrhp, stmthp)
+    OCIError *errhp;
+    OCISubscription *subscrhp;
+    OCIStmt *stmthp;
+{
+    return OCI_SUCCESS;
+    sb4 rc;
+    if ((rc = OCIAttrSet((dvoid *)stmthp, (ub4)OCI_HTYPE_STMT,
+            (dvoid *)subscrhp, (ub4)0,
+            (ub4)OCI_ATTR_CHNF_REGHANDLE, errhp)) != OCI_SUCCESS) {
+        printf("stmthp=%x, subscrhp=%x, errhp=%x, rc=%d\n", stmthp, subscrhp, errhp, rc);
+    }
+    return rc;
 }
+
+
+sb4 subsAddStatement2(sub, stmt)
+    OCI_Subscription *sub;
+    OCI_Statement *stmt;
+{
+    sb4 rc;
+    if ((rc = subsAddStatement(
+                    OCI_HandleGetError(OCI_StatementGetConnection(stmt)),
+                    OCI_HandleGetSubscription(sub), OCI_HandleGetStatement(stmt))
+                ) != OCI_SUCCESS) {
+        printf("subsAddStatement error\n");
+        return rc;
+    }
+    if (OCI_Execute(stmt) && (OCI_GetResultset(stmt) != NULL))
+        return OCI_SUCCESS;
+    return -1;
+}
+
 /* vim: set et tabstop=2: */

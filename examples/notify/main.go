@@ -51,7 +51,7 @@ func main() {
 	defer stmt.Execute("DROP TABLE TST_notify")
 
 	log.Printf("registering subscription ...")
-	sub, err := conn.NewSubscription("sub-00", gocilib.EvtAll)
+	sub, err := conn.NewRawSubscription("sub-00", gocilib.EvtAll, true, 300)
 	if err != nil {
 		log.Fatalf("error creating subscription: %v", err)
 	}

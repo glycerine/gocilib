@@ -16,14 +16,20 @@ limitations under the License.
 
 package gocilib
 
-// #cgo LDFLAGS: -locilib
+// #cgo LDFLAGS: -locilib -lclntsh
 // #include "ocilib.h"
+// #include "oci.h"
 // extern OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
+// sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, boolean rowids_needed, ub4 timeout);
 // extern const int RowidLength;
+// extern sb4 subsAddStatement2(OCI_Subscription *sub, OCI_Statement *stmt);
 import "C"
 
 import (
+	"bytes"
 	"log"
+	"math/rand"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -39,33 +45,53 @@ const (
 	EvtObjects   = EventType(C.OCI_CNT_OBJECTS)   // request for changes at objects (eg. tables) level (DDL / DML)
 )
 
-type Subscription struct {
+type Subscription interface {
+	AddStatement(st *Statement) (<-chan Event, error)
+	Close() error
+}
+
+type libSubscription struct {
 	handle *C.OCI_Subscription
 	events chan Event
 }
 
-var subscriptionsMu sync.Mutex
-var subscriptions map[*C.OCI_Subscription]*Subscription
+type rawSubscription struct {
+	handle *C.OCISubscription
+	ID     uint32
+	events chan Event
+}
 
-func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscription, error) {
-	subs := Subscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), 0, 0, C.FALSE),
+var (
+	subscriptionsMu  sync.Mutex
+	libSubscriptions map[*C.OCI_Subscription]*libSubscription
+	rawSubscriptions map[uint32]*rawSubscription
+)
+
+func (conn *Connection) NewLibSubscription(name string, evt EventType, rowidsNeeded bool, timeout int) (Subscription, error) {
+	CrowidsNeeded := C.boolean(C.FALSE)
+	if rowidsNeeded {
+		CrowidsNeeded = C.TRUE
+	}
+
+	subs := libSubscription{
+		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt),
+			0, C.uint(timeout), CrowidsNeeded),
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()
 	}
-	subs.events = make(chan Event, 1)
 	subscriptionsMu.Lock()
-	if subscriptions == nil {
-		subscriptions = make(map[*C.OCI_Subscription]*Subscription, 1)
+	defer subscriptionsMu.Unlock()
+
+	if libSubscriptions == nil {
+		libSubscriptions = make(map[*C.OCI_Subscription]*libSubscription, 1)
 	}
-	subscriptions[subs.handle] = &subs
-	subscriptionsMu.Unlock()
+	libSubscriptions[subs.handle] = &subs
 	return &subs, nil
 }
 
 // AddStatement adds the statement to be watched, and returns the event channel.
-func (subs *Subscription) AddStatement(st *Statement) (<-chan Event, error) {
+func (subs *libSubscription) AddStatement(st *Statement) (<-chan Event, error) {
 	if C.OCI_SubscriptionAddStatement(subs.handle, st.handle) != C.TRUE {
 		return nil, getLastErr()
 	}
@@ -73,7 +99,7 @@ func (subs *Subscription) AddStatement(st *Statement) (<-chan Event, error) {
 }
 
 // AddQuery is a conveniance function which prepares the query and adds the statement.
-func (subs *Subscription) AddQuery(conn *Connection, qry string) (<-chan Event, error) {
+func (subs *libSubscription) AddQuery(conn *Connection, qry string) (<-chan Event, error) {
 	stmt, err := conn.NewPreparedStatement(qry)
 	if err != nil {
 		return nil, err
@@ -81,37 +107,126 @@ func (subs *Subscription) AddQuery(conn *Connection, qry string) (<-chan Event, 
 	return subs.AddStatement(stmt)
 }
 
-func (subs *Subscription) Unregister() error {
+func (subs *libSubscription) Close() error {
 	var err error
 	if subs.handle != nil {
 		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
 			err = getLastErr()
 		}
 		subscriptionsMu.Lock()
-		delete(subscriptions, subs.handle)
+		delete(libSubscriptions, subs.handle)
 		subscriptionsMu.Unlock()
 		subs.handle = nil
 	}
 	return err
 }
 
-func (subs *Subscription) Close() error {
-	return subs.Unregister()
-}
-
-func getSubscriptionFromHandle(handle *C.OCI_Subscription) *Subscription {
+func getSubscriptionFromHandle(handle *C.OCI_Subscription) Subscription {
 	if handle == nil {
 		return nil
 	}
 	subscriptionsMu.Lock()
-	subs := subscriptions[handle]
+	subs := libSubscriptions[handle]
 	subscriptionsMu.Unlock()
 	return subs
+}
+
+func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNeeded bool, timeout int) (Subscription, error) {
+	CrowidsNeeded := C.boolean(C.FALSE)
+	if rowidsNeeded {
+		CrowidsNeeded = C.TRUE
+	}
+	subscriptionID := uint32(rand.Int31())
+
+	subscriptionsMu.Lock()
+	defer subscriptionsMu.Unlock()
+
+	var subshp *C.OCISubscription
+	if C.setupNotifications2(
+		&subshp, conn.handle, C.ub4(subscriptionID),
+		CrowidsNeeded, C.ub4(timeout),
+	) != C.OCI_SUCCESS {
+		return nil, getLastErr()
+	}
+	subs := rawSubscription{handle: subshp, events: make(chan Event, 1),
+		ID: subscriptionID}
+	if rawSubscriptions == nil {
+		rawSubscriptions = make(map[uint32]*rawSubscription, 1)
+	}
+	rawSubscriptions[subscriptionID] = &subs
+	return subs, nil
+}
+
+// AddStatement adds the statement to be watched, and returns the event channel.
+func (subs rawSubscription) AddStatement(st *Statement) (<-chan Event, error) {
+	rc := C.subsAddStatement2(subs.handle, st.handle)
+	if rc != C.TRUE {
+		err := getLastErr().(*Error)
+		if err.Code == 0 {
+			err = getLastRawError(C.OCI_StatementGetConnection(st.handle))
+			err.Code = int(rc)
+		}
+		return nil, err
+	}
+	return subs.events, nil
+}
+
+// AddQuery is a conveniance function which prepares the query and adds the statement.
+func (subs rawSubscription) AddQuery(conn *Connection, qry string) (<-chan Event, error) {
+	stmt, err := conn.NewPreparedStatement(qry)
+	if err != nil {
+		return nil, err
+	}
+	return subs.AddStatement(stmt)
+}
+
+func (subs rawSubscription) Close() error {
+	var err error
+	if subs.handle != nil {
+		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
+			err = getLastErr()
+		}
+		subscriptionsMu.Lock()
+		delete(rawSubscriptions, subs.ID)
+		subscriptionsMu.Unlock()
+		subs.handle = nil
+	}
+	return err
+}
+
+func getSubscriptionFromID(ID C.uint) rawSubscription {
+	subscriptionsMu.Lock()
+	subs := rawSubscriptions[uint32(ID)]
+	subscriptionsMu.Unlock()
+	return *subs
 }
 
 type Event struct {
 	typ, op int
 	rowid   string
+}
+
+//export goNotificationCallback
+func goNotificationCallback(subscriptionID C.uint, notifyType C.uint,
+	table_name *C.char, rows *C.char, num_rows C.int,
+) {
+	log.Printf("CALLBACK ID=%d type=%d", subscriptionID, notifyType)
+	if table_name == nil {
+		return
+	}
+	table := C.GoString(table_name)
+	if rows == nil {
+		return
+	}
+	if num_rows <= 0 {
+		return
+	}
+	all := C.GoStringN(rows, num_rows*C.int(rowidLength))
+	rowids := make([]string, int(num_rows))
+	for i := range rowids {
+		rowids[i] = all[i*rowidLength : (i+1)*rowidLength]
+	}
+	log.Printf("CALLBACK type=%d table=%s rowids=%q", notifyType, table, rowids)
 }
 
 //export goEventHandler
@@ -122,7 +237,7 @@ func goEventHandler(eventP unsafe.Pointer) {
 	op := C.OCI_EventGetOperation(event)
 	handle := C.OCI_EventGetSubscription(event)
 
-	subs := getSubscriptionFromHandle(handle)
+	subs := getSubscriptionFromHandle(handle).(*libSubscription)
 	switch typ {
 	case C.OCI_ENT_DEREGISTER:
 		subs.events <- Event{typ: C.OCI_ENT_DEREGISTER}
@@ -140,23 +255,26 @@ func goEventHandler(eventP unsafe.Pointer) {
 	}
 }
 
-//export goNotificationCallback
-func goNotificationCallback(notifyType C.uint, table_name *C.char, rows *C.char, num_rows C.int) {
-	log.Printf("CALLBACK type=%d", notifyType)
-	if table_name == nil {
-		return
+func getLastRawError(con *C.OCI_Connection) *Error {
+	errbuf := make([]byte, 4000)
+	var (
+		i, errorcode int
+		ec           C.sb4
+		message      []string
+	)
+	conp := unsafe.Pointer(C.OCI_HandleGetError(con))
+	for {
+		i++
+		errstat := C.OCIErrorGet(conp, C.ub4(i), nil,
+			&ec, (*C.OraText)(&errbuf[0]), C.ub4(len(errbuf)-1),
+			C.OCI_HTYPE_ERROR)
+		if ec != 0 && errorcode == 0 {
+			errorcode = int(ec)
+		}
+		if errstat == C.OCI_NO_DATA || i > 100 {
+			break
+		}
+		message = append(message, string(errbuf[:bytes.IndexByte(errbuf, 0)]))
 	}
-	table := C.GoString(table_name)
-	if rows == nil {
-		return
-	}
-	if num_rows <= 0 {
-		return
-	}
-	all := C.GoStringN(rows, num_rows*C.int(rowidLength))
-	rowids := make([]string, int(num_rows))
-	for i := range rowids {
-		rowids[i] = all[i*rowidLength : (i+1)*rowidLength]
-	}
-	log.Printf("CALLBACK type=%d table=%s rowids=%q", notifyType, table, rowids)
+	return &Error{Code: errorcode, Text: strings.Join(message, "")}
 }
