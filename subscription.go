@@ -18,7 +18,8 @@ package gocilib
 
 // #cgo LDFLAGS: -locilib
 // #include "ocilib.h"
-// extern OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout);
+// extern OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
+// extern const int RowidLength;
 import "C"
 
 import (
@@ -26,6 +27,8 @@ import (
 	"sync"
 	"unsafe"
 )
+
+var rowidLength = int(C.RowidLength)
 
 type EventType int
 
@@ -46,7 +49,7 @@ var subscriptions map[*C.OCI_Subscription]*Subscription
 
 func (conn *Connection) NewSubscription(name string, evt EventType) (*Subscription, error) {
 	subs := Subscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), 0, 0),
+		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt), 0, 0, C.FALSE),
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()
@@ -135,4 +138,25 @@ func goEventHandler(eventP unsafe.Pointer) {
 			subs.events <- Event{typ: int(typ), op: int(op)}
 		}
 	}
+}
+
+//export goNotificationCallback
+func goNotificationCallback(notifyType C.uint, table_name *C.char, rows *C.char, num_rows C.int) {
+	log.Printf("CALLBACK type=%d", notifyType)
+	if table_name == nil {
+		return
+	}
+	table := C.GoString(table_name)
+	if rows == nil {
+		return
+	}
+	if num_rows <= 0 {
+		return
+	}
+	all := C.GoStringN(rows, num_rows*C.int(rowidLength))
+	rowids := make([]string, int(num_rows))
+	for i := range rowids {
+		rowids[i] = all[i*rowidLength : (i+1)*rowidLength]
+	}
+	log.Printf("CALLBACK type=%d table=%s rowids=%q", notifyType, table, rowids)
 }
