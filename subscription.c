@@ -18,11 +18,11 @@ limitations under the License.
 #include <stdlib.h>
 #include <string.h>
 #include <oci.h>
+#include <ocilib.h>
+#include "_cgo_export.h"
 
-#define MAXSTRLENGTH 1024
-
-static void checker();
-
+#define ROWID_LENGTH 18
+const int RowidLength = ROWID_LENGTH;
 
 void checker(errhp, status)
 OCIError *errhp;
@@ -77,23 +77,19 @@ ub4 mode;
   ub4   notify_type;
   OCIEnv *envhp;
   OCIError *errhp;
-  OCIServer *srvhp;
-  OCISvcCtx *svchp;
-  OCISession *usrhp;
-  OCIStmt *stmthp;
-  dvoid *tmp;
 
   dvoid *elemind = (dvoid *)0;
   OCIColl *table_changes = (OCIColl  *)0 ;
                    /* Collection of pointers to table chg descriptors */
-  dvoid **table_descp;          /* Pointer to Table Change Descriptor */
   dvoid *table_desc;              /*  Table Change Descriptor */
   ub4 num_rows = 0;
   ub4 table_op;
   ub4 num_tables = 0;
-  ub2 i, j;
+  ub2 i, j, length;
   boolean exist;
   text *table_name;
+
+  text *rowids;
 
   printf("Received Notification\n");
 
@@ -116,12 +112,13 @@ ub4 mode;
   checker(errhp,
           OCIAttrGet( change_descriptor, OCI_DTYPE_CHDES, &notify_type, NULL,
                 OCI_ATTR_CHDES_NFYTYPE, errhp));
+
   if (notify_type == OCI_EVENT_SHUTDOWN) {
     printf("Shutdown Notification\n");
-    goNotificationCallback(notify_type);
+    goNotificationCallback(notify_type, NULL, "", -1);
   } else if (notify_type == OCI_EVENT_DEREG) {
     printf("Registration Removed\n");
-    goNotificationCallback(notify_type);
+    goNotificationCallback(notify_type, NULL, "", -1);
   }
 
   if (notify_type != OCI_EVENT_OBJCHANGE)
@@ -134,41 +131,6 @@ ub4 mode;
   /* The below code is only executed if the notification is of type
      OCI_EVENT_OBJCHANGE
    */
-  /* server contexts */
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &srvhp,
-                            OCI_HTYPE_SERVER,
-                   (size_t) 0, (dvoid **) 0);
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &svchp,
-                             OCI_HTYPE_SVCCTX,
-                              (size_t) 0, (dvoid **) 0);
-
-  /* Allocate a statement handle */
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &stmthp,
-                  (ub4) OCI_HTYPE_STMT, 52, (dvoid **) &tmp);
-
-  /* set attribute server context in the service context */
-  OCIAttrSet( (dvoid *) svchp, (ub4) OCI_HTYPE_SVCCTX, (dvoid *)srvhp,
-              (ub4) 0, (ub4) OCI_ATTR_SERVER, (OCIError *) errhp);
-
-  checker(errhp, OCIServerAttach( srvhp, errhp, (text *) 0, (sb4) 0,
-          (ub4) OCI_DEFAULT));
-
-   /* allocate a SESSION  handle */
-  OCIHandleAlloc((dvoid *)envhp, (dvoid **)&usrhp, (ub4) OCI_HTYPE_SESSION,
-                     (size_t) 0, (dvoid **) 0);
-
-  OCIAttrSet((dvoid *)usrhp, (ub4)OCI_HTYPE_SESSION,
-             (dvoid *)((text *)"HR"),
-             (ub4)strlen((char *)"HR"),  OCI_ATTR_USERNAME, errhp);
-
-  OCIAttrSet((dvoid *)usrhp, (ub4)OCI_HTYPE_SESSION,
-             (dvoid *)((text *)"HR"), (ub4)strlen((char *)"HR"),
-             OCI_ATTR_PASSWORD, errhp);
-
-  checker(errhp,OCISessionBegin (svchp, errhp, usrhp, OCI_CRED_RDBMS,
-                                 OCI_DEFAULT));
-  OCIAttrSet((dvoid *)svchp, (ub4)OCI_HTYPE_SVCCTX,
-             (dvoid *)usrhp, (ub4)0, OCI_ATTR_SESSION, errhp);
 
   /* Obtain the collection of table change descriptors */
   checker(errhp,OCIAttrGet(change_descriptor, OCI_DTYPE_CHDES, &table_changes,
@@ -186,26 +148,16 @@ ub4 mode;
   for (i = 0; i < num_tables; i++) {
     OCIColl *row_changes = (OCIColl  *)0;
     /* Collection of pointers to row chg. Descriptors */
-    dvoid **row_descp;            /*  Pointer to Row Change Descriptor */
     dvoid   *row_desc;               /*   Row Change Descriptor */
-    text *row_id;
     ub4 rowid_size;
-    text *ocistmt;
     OCIDefine *defnp1 = (OCIDefine *)0;
-    char *outstr;
 
     checker(errhp,OCICollGetElem(envhp, errhp, (OCIColl *) table_changes, i,
-                                 &exist, &table_descp, &elemind));
+                                 &exist, &table_desc, &elemind));
 
-    table_desc = *table_descp;
     checker(errhp,OCIAttrGet(table_desc, OCI_DTYPE_TABLE_CHDES, &table_name,
                              NULL,
                              OCI_ATTR_CHDES_TABLE_NAME, errhp));
-    if (strcmp(table_name, "HR.EMPLOYEES") == 0) {
-      printf("EMPLOYEE table modified \n");
-    } else if (strcmp(table_name, "HR.DEPARTMENTS") == 0) {
-      printf("DEPARTMENTS table modified \n");
-    }
 
     checker(errhp,OCIAttrGet (table_desc, OCI_DTYPE_TABLE_CHDES,
                               (dvoid *)&table_op, NULL,
@@ -218,10 +170,11 @@ ub4 mode;
      */
     if (table_op & OCI_OPCODE_ALLROWS) {
       printf("Full Table Invalidation\n");
+      goNotificationCallback(notify_type, table_name, NULL, -1);
       continue;
     }
 
-     /* Obtain the collection of  ROW CHANGE descriptors */
+    /* Obtain the collection of  ROW CHANGE descriptors */
     checker(errhp,OCIAttrGet (table_desc, OCI_DTYPE_TABLE_CHDES, &row_changes,
                                NULL, OCI_ATTR_CHDES_TABLE_ROW_CHANGES, errhp));
 
@@ -233,55 +186,29 @@ ub4 mode;
 
     printf ("Number of rows modified is %d\n", num_rows);
     fflush(stdout);
-    for (j = 0; j<num_rows; j++) {
+
+    rowids = (char *)malloc(ROWID_LENGTH * num_rows);
+    if (rowids == NULL) {
+        printf ("cannot allocate memory for %d rowids", num_rows);
+        continue;
+    }
+    for (j = 0; j < num_rows; j++) {
       OCICollGetElem(envhp, errhp, (OCIColl *) row_changes,
-                     j, &exist, &row_descp, &elemind);
-      row_desc = *row_descp;
+                     j, &exist, &row_desc, &elemind);
 
-      OCIAttrGet (row_desc, OCI_DTYPE_ROW_CHDES, (dvoid *)&row_id,
+      rowid_size = ROWID_LENGTH;
+      OCIAttrGet (row_desc, OCI_DTYPE_ROW_CHDES,
+                  (dvoid *)(rowids + j*ROWID_LENGTH),
                   &rowid_size, OCI_ATTR_CHDES_ROW_ROWID, errhp);
-      printf ("%s table has been modified in row %s \n", table_name, row_id);
+      rowids[j*ROWID_LENGTH + rowid_size + 1] = 0;
+      printf ("%s table has been modified in row %s \n", table_name, (rowids+j*ROWID_LENGTH));
       fflush(stdout);
-      ocistmt = (text *)malloc(MAXSTRLENGTH*sizeof(char));
+    }
+    goNotificationCallback(notify_type, table_name, rowids, num_rows);
+  }
 
-      /* QUERY FROM DATABASE TO VIEW CONTENTS OF CHANGED ROW */
-      sprintf (ocistmt, "select * from %s where rowid='%s'", table_name, row_id);
-      printf("Executing stmt %s\n", ocistmt);
-
-      /* prepare query statement*/
-      checker(errhp,OCIStmtPrepare(stmthp, errhp, ocistmt,
-                                   (ub4)strlen((char *)ocistmt),
-                                   (ub4)OCI_NTV_SYNTAX, (ub4)OCI_DEFAULT));
-      outstr = (char *)malloc(MAXSTRLENGTH*sizeof(char));
-
-      checker(errhp,OCIDefineByPos(stmthp, &defnp1, errhp, 1, (dvoid *)outstr,
-                                   MAXSTRLENGTH * sizeof(char),
-                                   SQLT_STR, (dvoid *)0, (ub2 *)0, (ub2 *)0,
-                                   OCI_DEFAULT));
-
-      /* execute the statement */
-      checker(errhp,OCIStmtExecute(svchp, stmthp, errhp, (ub4)1, (ub4) 0,
-                                   (CONST OCISnapshot *) NULL,
-                                   (OCISnapshot *) NULL, OCI_DEFAULT));
-
-      printf("First column of modified row is %s\n", outstr);
-    }  /* Loop for j in 1..numrows */
-
-  } /* Loop for I in 1..numtables */
-
-  /* End session and detach from server */
-  checker(errhp, OCISessionEnd(svchp, errhp, usrhp, OCI_DEFAULT));
-  checker(errhp, OCIServerDetach(srvhp, errhp, OCI_DEFAULT));
-  if (stmthp)
-    OCIHandleFree((dvoid *)stmthp, OCI_HTYPE_STMT);
   if (errhp)
     OCIHandleFree((dvoid *)errhp, OCI_HTYPE_ERROR);
-  if (srvhp)
-    OCIHandleFree((dvoid *)srvhp, OCI_HTYPE_SERVER);
-  if (svchp)
-    OCIHandleFree((dvoid *)svchp, OCI_HTYPE_SVCCTX);
-  if (usrhp)
-    OCIHandleFree((dvoid *)usrhp, OCI_HTYPE_SESSION);
   if (envhp)
     OCIHandleFree((dvoid *)envhp, OCI_HTYPE_ENV);
 
@@ -289,112 +216,102 @@ ub4 mode;
 
 
 /* The following routine creates registrations and waits for notifications. */
-void setupNotifications(envhp, errhp)
+sb4 setupNotifications(subscrhpp, envhp, errhp, svchp, usrhp, subscriptionID, rowids_needed, timeout)
+OCISubscription **subscrhpp;
+OCIEnv *envhp;
+OCIError *errhp;
+OCISvcCtx *svchp;
+OCISession *usrhp;
+ub4 subscriptionID;
+boolean rowids_needed;
+ub4 timeout;
 {
-  OCISvcCtx *svchp;
-  OCIError *errhp;
-  OCISession *usrhp;
-  OCIStmt *stmthp;
-  OCIEnv *envhp;
-  OCIServer *srvhp;
-  text *username;
+  const ub4 namespace = OCI_SUBSCR_NAMESPACE_DBCHANGE;
+  sb4 rc;
   OCISubscription *subscrhp;
-  ub4 namespace = OCI_SUBSCR_NAMESPACE_DBCHANGE;
-  ub4 timeout = 1800;
-  text dname[MAXSTRLENGTH];
-  OCIDefine *defnp1 = (OCIDefine *)0;
-  OCIDefine *defnp2 = (OCIDefine *)0;
-  OCIDefine *defnp3 = (OCIDefine *)0;
-  OCIDefine *defnp4 = (OCIDefine *)0;
-  OCIDefine *defnp5 = (OCIDefine *)0;
-  int mgr_id =0;
-  int dept_id =0;
-  dvoid *tmp;
-  boolean rowids_needed = TRUE;
-
-  char query_text1[] = "SELECT MANAGER_ID from EMPLOYEES where EMPLOYEE_ID=206";
-  char query_text2[] =
-  "SELECT department_id  from DEPARTMENTS where DEPARTMENT_NAME = 'Payroll'";
-  /* DEPARTMENTS  is also a cached object */
 
   /* Initialize the environment. The environment has to be initialized
      with OCI_EVENTS and OCI_OBJECTS to create a change notification
      registration and receive notifications.
   */
-  OCIEnvCreate( (OCIEnv **) &envhp, OCI_EVENTS|OCI_OBJECT, (dvoid *)0,
-                    (dvoid * (*)(dvoid *, size_t)) 0,
-                    (dvoid * (*)(dvoid *, dvoid *, size_t))0,
-                    (void (*)(dvoid *, dvoid *)) 0,
-                    (size_t) 0, (dvoid **) 0 );
 
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &errhp, OCI_HTYPE_ERROR,
-                         (size_t) 0, (dvoid **) 0);
-   /* server contexts */
-  OCIHandleAlloc((dvoid *) envhp, (dvoid **) &srvhp, OCI_HTYPE_SERVER,
-                        (size_t) 0,
-                        (dvoid **) 0);
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &svchp, OCI_HTYPE_SVCCTX,
-                         (size_t) 0, (dvoid **) 0);
-   checker(errhp,OCIServerAttach( srvhp, errhp, (text *) 0, (sb4) 0,
-           (ub4) OCI_DEFAULT));
-   OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &svchp, (ub4) OCI_HTYPE_SVCCTX,
-                   52, (dvoid **)0);
-  /* set attribute server context in the service context */
-  OCIAttrSet( (dvoid *) svchp, (ub4) OCI_HTYPE_SVCCTX, (dvoid *)srvhp,
-              (ub4) 0, (ub4) OCI_ATTR_SERVER, (OCIError *) errhp);
-
-   /* allocate a user context handle */
-  OCIHandleAlloc((dvoid *)envhp, (dvoid **)&usrhp, (ub4) OCI_HTYPE_SESSION,
-                               (size_t) 0, (dvoid **) 0);
-
-  OCIAttrSet((dvoid *)usrhp, (ub4)OCI_HTYPE_SESSION,
-             (dvoid *)((text *)"HR"), (ub4)strlen((char *)"HR"),
-              OCI_ATTR_USERNAME, errhp);
-
-  OCIAttrSet((dvoid *)usrhp, (ub4)OCI_HTYPE_SESSION,
-            (dvoid *)((text *)"HR"), (ub4)strlen((char *)"HR"),
-             OCI_ATTR_PASSWORD, errhp);
-  checker(errhp,OCISessionBegin (svchp, errhp, usrhp, OCI_CRED_RDBMS,
-           OCI_DEFAULT));
-   /* Allocate a statement handle */
-  OCIHandleAlloc( (dvoid *) envhp, (dvoid **) &stmthp,
-                                (ub4) OCI_HTYPE_STMT, 52, (dvoid **) &tmp);
-
-  OCIAttrSet((dvoid *)svchp, (ub4)OCI_HTYPE_SVCCTX, (dvoid *)usrhp, (ub4)0,
-                       OCI_ATTR_SESSION, errhp);
+  if ((rc = OCIAttrSet((dvoid *)svchp, (ub4)OCI_HTYPE_SVCCTX,
+                       (dvoid *)usrhp, (ub4)0, OCI_ATTR_SESSION, errhp)) != OCI_SUCCESS)
+    return rc;
 
   /* allocate subscription handle */
-  OCIHandleAlloc ((dvoid *) envhp, (dvoid **) &subscrhp, OCI_HTYPE_SUBSCRIPTION,
-                   (size_t) 0,
-                    (dvoid **) 0);
+  if ((rc = OCIHandleAlloc ((dvoid *) envhp, (dvoid **) subscrhpp,
+                            OCI_HTYPE_SUBSCRIPTION, (size_t) 0, (dvoid **) 0)) != OCI_SUCCESS)
+    return rc;
   printf("Allocated handles\n");
 
+  subscrhp = *subscrhpp;
+
   /* set the namespace to DBCHANGE */
-  OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,  (dvoid *) &namespace,
-              sizeof(ub4),
-              OCI_ATTR_SUBSCR_NAMESPACE, errhp);
+  if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                        (dvoid *) &namespace, sizeof(ub4),
+                        OCI_ATTR_SUBSCR_NAMESPACE, errhp)) != OCI_SUCCESS)
+    return rc;
+
   /* Associate a notification callback */
-  OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
+  if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
               (void *)notification_callback,  0,
-              OCI_ATTR_SUBSCR_CALLBACK, errhp);
+              OCI_ATTR_SUBSCR_CALLBACK, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
 
   /* Allow extraction of rowid information */
-  checker(errhp, OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
+  if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
                   (dvoid *)&rowids_needed, sizeof(ub4),
-                  OCI_ATTR_CHNF_ROWIDS, errhp));
+                  OCI_ATTR_CHNF_ROWIDS, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
 
-  /* Can optionally provide a client specific context using
-     OCI_ATTR_SUBSCR_CTX */
+  /* Provide a client specific context using OCI_ATTR_SUBSCR_CTX */
+  if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                  (dvoid *)&subscriptionID, sizeof(ub4),
+                  OCI_ATTR_SUBSCR_CTX, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
 
-  /* Set a timeout value of half an hour */
-  OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
-             (dvoid *)&timeout, 0, OCI_ATTR_SUBSCR_TIMEOUT, errhp);
+  /* Set a timeout value */
+  if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                       (dvoid *)&timeout, 0,
+                       OCI_ATTR_SUBSCR_TIMEOUT, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
 
   /* Create a new registration in the  DBCHANGE namespace */
-  checker(errhp,OCISubscriptionRegister(svchp, &subscrhp, 1, errhp, OCI_DEFAULT));
+  if ((rc = OCISubscriptionRegister(svchp, &subscrhp, 1, errhp, OCI_DEFAULT)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
 
   printf("Created Registration\n");
-/* Multiple queries can now be associated with the subscription */
+  return OCI_SUCCESS;
+}
+
+sb4 setupNotifications2(subscrhpp, con, subscriptionID, rowids_needed, timeout)
+OCISubscription **subscrhpp;
+OCI_Connection *con;
+ub4 subscriptionID;
+boolean rowids_needed;
+ub4 timeout;
+{
+    return setupNotifications(subscrhpp,
+                OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
+                OCI_HandleGetContext(con), OCI_HandleGetSession(con),
+            subscriptionID, rowids_needed, timeout);
+}
+
+
+sb4 subsRegisterStatement() {
+
+  /* Multiple queries can now be associated with the subscription */
 
   /* Prepare the statement */
   checker(errhp,OCIStmtPrepare (stmthp, errhp, query_text1,
@@ -429,7 +346,6 @@ void setupNotifications(envhp, errhp)
 
   printf("Waiting for Notifications to arrive\n");
   /* Wait for notifications to arrive */
-  while (notifications_processed != 1);
 
   /* Unregister the subscription */
   checker(errhp,
@@ -448,3 +364,4 @@ void setupNotifications(envhp, errhp)
   OCIHandleFree((dvoid *) errhp, (ub4) OCI_HTYPE_ERROR);
   OCIHandleFree((dvoid *) envhp, (ub4) OCI_HTYPE_ENV);
 }
+/* vim: set et tabstop=2: */
