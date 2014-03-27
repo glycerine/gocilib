@@ -217,17 +217,20 @@ ub4 mode;
 
 
 /* The following routine creates registrations and waits for notifications. */
-sb4 setupNotifications(subscrhpp, envhp, errhp, svchp, usrhp, subscriptionID, rowids_needed, timeout)
+sb4 setupNotifications(subscrhpp, envhp, errhp, svchp, usrhp, subscriptionID, operations, rowids_needed, timeout)
 OCISubscription **subscrhpp;
 OCIEnv *envhp;
 OCIError *errhp;
 OCISvcCtx *svchp;
 OCISession *usrhp;
 ub4 subscriptionID;
+ub4 operations;
 boolean rowids_needed;
 ub4 timeout;
 {
   const ub4 namespace = OCI_SUBSCR_NAMESPACE_DBCHANGE;
+  const ub4 qosflags = OCI_SUBSCR_CQ_QOS_QUERY|OCI_SUBSCR_CQ_QOS_BEST_EFFORT;
+  if (operations == 0) operations = OCI_OPCODE_ALLOPS;
   sb4 rc;
   OCISubscription *subscrhp;
 
@@ -286,6 +289,21 @@ ub4 timeout;
     return rc;
   }
 
+  /* Set a QOSFLAG value */
+  if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                       (dvoid *)&qosflags, 0,
+                       OCI_ATTR_SUBSCR_QOSFLAGS, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
+
+  /* Set a operations value */
+  if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                       (dvoid *)&operations, 0,
+                       OCI_ATTR_CHNF_OPERATIONS, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
   /* Create a new registration in the  DBCHANGE namespace */
   if ((rc = OCISubscriptionRegister(svchp, &subscrhp, 1, errhp, OCI_DEFAULT)) != OCI_SUCCESS) {
     OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
@@ -296,13 +314,17 @@ ub4 timeout;
   return OCI_SUCCESS;
 }
 
-sb4 setupNotifications2(subscrhpp, con, subscriptionID, rowids_needed, timeout)
+sb4 setupNotifications2(subscrhpp, con, subscriptionID, operations, rowids_needed, timeout)
 OCISubscription **subscrhpp;
 OCI_Connection *con;
 ub4 subscriptionID;
+ub4 operations;
 boolean rowids_needed;
 ub4 timeout;
 {
+    printf("envhp=%x errhp=%x ctxhp=%x seshp=%x\n",
+            OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
+            OCI_HandleGetContext(con), OCI_HandleGetSession(con));
     return setupNotifications(subscrhpp,
                 OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
                 OCI_HandleGetContext(con), OCI_HandleGetSession(con),
@@ -315,7 +337,6 @@ sb4 subsAddStatement(errhp, subscrhp, stmthp)
     OCISubscription *subscrhp;
     OCIStmt *stmthp;
 {
-    return OCI_SUCCESS;
     sb4 rc;
     if ((rc = OCIAttrSet((dvoid *)stmthp, (ub4)OCI_HTYPE_STMT,
             (dvoid *)subscrhp, (ub4)0,
@@ -331,10 +352,15 @@ sb4 subsAddStatement2(sub, stmt)
     OCI_Statement *stmt;
 {
     sb4 rc;
+    printf("stmthp=%x subhp=%x errhp=%x\n",
+                    OCI_HandleGetStatement(stmt),
+                    OCI_HandleGetSubscription(sub),
+                    OCI_HandleGetError(OCI_StatementGetConnection(stmt)));
     if ((rc = subsAddStatement(
                     OCI_HandleGetError(OCI_StatementGetConnection(stmt)),
-                    OCI_HandleGetSubscription(sub), OCI_HandleGetStatement(stmt))
-                ) != OCI_SUCCESS) {
+                    OCI_HandleGetSubscription(sub),
+                    OCI_HandleGetStatement(stmt)
+                    )) != OCI_SUCCESS) {
         printf("subsAddStatement error\n");
         return rc;
     }

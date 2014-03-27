@@ -63,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating statement: %v", err)
 	}
-	if err = st.Prepare("SELECT * FROM TST_notify"); err != nil {
+	if err = st.Prepare("SELECT key FROM TST_notify"); err != nil {
 		log.Fatalf("error preparing query: %v", err)
 	}
 	events, err := sub.AddStatement(st)

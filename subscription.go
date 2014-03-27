@@ -20,7 +20,7 @@ package gocilib
 // #include "ocilib.h"
 // #include "oci.h"
 // extern OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
-// sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, boolean rowids_needed, ub4 timeout);
+// sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
 // extern const int RowidLength;
 // extern sb4 subsAddStatement2(OCI_Subscription *sub, OCI_Statement *stmt);
 import "C"
@@ -57,6 +57,7 @@ type libSubscription struct {
 
 type rawSubscription struct {
 	handle *C.OCISubscription
+	conn   *C.OCI_Connection
 	ID     uint32
 	events chan Event
 }
@@ -110,12 +111,12 @@ func (subs *libSubscription) AddQuery(conn *Connection, qry string) (<-chan Even
 func (subs *libSubscription) Close() error {
 	var err error
 	if subs.handle != nil {
-		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
-			err = getLastErr()
-		}
 		subscriptionsMu.Lock()
 		delete(libSubscriptions, subs.handle)
 		subscriptionsMu.Unlock()
+		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
+			err = getLastErr()
+		}
 		subs.handle = nil
 	}
 	return err
@@ -143,13 +144,13 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 
 	var subshp *C.OCISubscription
 	if C.setupNotifications2(
-		&subshp, conn.handle, C.ub4(subscriptionID),
+		&subshp, conn.handle, C.ub4(subscriptionID), C.ub4(evt),
 		CrowidsNeeded, C.ub4(timeout),
 	) != C.OCI_SUCCESS {
 		return nil, getLastErr()
 	}
-	subs := rawSubscription{handle: subshp, events: make(chan Event, 1),
-		ID: subscriptionID}
+	subs := rawSubscription{handle: subshp, conn: conn.handle,
+		events: make(chan Event, 1), ID: subscriptionID}
 	if rawSubscriptions == nil {
 		rawSubscriptions = make(map[uint32]*rawSubscription, 1)
 	}
@@ -183,12 +184,17 @@ func (subs rawSubscription) AddQuery(conn *Connection, qry string) (<-chan Event
 func (subs rawSubscription) Close() error {
 	var err error
 	if subs.handle != nil {
-		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
-			err = getLastErr()
-		}
 		subscriptionsMu.Lock()
 		delete(rawSubscriptions, subs.ID)
 		subscriptionsMu.Unlock()
+		if C.OCISubscriptionUnRegister(
+			(*C.OCISvcCtx)(C.OCI_HandleGetContext(subs.conn)),
+			subs.handle,
+			(*C.OCIError)(C.OCI_HandleGetError(subs.conn)),
+			C.OCI_DEFAULT,
+		) != C.OCI_SUCCESS {
+			err = getLastErr()
+		}
 		subs.handle = nil
 	}
 	return err
