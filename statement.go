@@ -28,9 +28,9 @@ import (
 var BindArraySize = C.uint(1000)
 
 type Statement struct {
-	handle    *C.OCI_Statement
-	verb      string
-	bindCount int
+	handle          *C.OCI_Statement
+	statement, verb string
+	bindCount       int
 }
 
 func (conn *Connection) NewStatement() (*Statement, error) {
@@ -65,14 +65,26 @@ func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	stmt.statement = qry
+	stmt.verb = ""
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return nil
 }
 
+// Execute the given query.
+// If qry is "", then the previously prepared/executed query string is used.
 func (stmt *Statement) Execute(qry string) error {
-	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
+	var text *C.char
+	if qry == "" && stmt.statement != "" { // already prepared
+		text = C.CString(stmt.statement)
+	} else {
+		text = C.CString(qry)
+	}
+	if C.OCI_ExecuteStmt(stmt.handle, text) != C.TRUE {
 		return getLastErr()
+	}
+	if qry != "" {
+		stmt.statement = qry
 	}
 	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))

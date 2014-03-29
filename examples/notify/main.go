@@ -51,7 +51,7 @@ func main() {
 	defer stmt.Execute("DROP TABLE TST_notify")
 
 	log.Printf("registering subscription ...")
-	sub, err := conn.NewRawSubscription("sub-00", gocilib.EvtAll, true, 300)
+	sub, err := conn.NewLibSubscription("sub-00", gocilib.EvtAll, true, 300)
 	if err != nil {
 		log.Fatalf("error creating subscription: %v", err)
 	}
@@ -59,12 +59,12 @@ func main() {
 
 	log.Printf("sub: %#v", sub)
 
-	st, err := conn.NewStatement()
+	st, err := conn.NewPreparedStatement("SELECT key FROM TST_notify")
 	if err != nil {
 		log.Fatalf("error creating statement: %v", err)
 	}
-	if err = st.Prepare("SELECT key FROM TST_notify"); err != nil {
-		log.Fatalf("error preparing query: %v", err)
+	if err = st.Execute(""); err != nil {
+		log.Fatalf("error executing %s: %v", st, err)
 	}
 	events, err := sub.AddStatement(st)
 	if err != nil {
@@ -90,6 +90,9 @@ func main() {
 		} {
 			if err := st.Execute(qry); err != nil {
 				log.Printf("%d. ERROR executing %s: %v", i, qry, err)
+			}
+			if err := conn.Commit(); err != nil {
+				log.Printf("%d. ERROR commiting: %v", i, err)
 			}
 			time.Sleep(500 * time.Millisecond)
 		}

@@ -18,6 +18,8 @@ package gocilib
 
 // #cgo LDFLAGS: -locilib
 // #include "ocilib.h"
+//
+// // extern int initialize();
 import "C"
 
 import (
@@ -138,10 +140,14 @@ func (conn *Connection) Close() error {
 
 func getLastErr() error {
 	ociErr := C.OCI_GetLastError()
-	return &Error{
-		Code: int(C.OCI_ErrorGetOCICode(ociErr)),
-		Text: C.GoString(C.OCI_ErrorGetString(ociErr)),
+	if ociErr == nil {
+		return nil
 	}
+	code := int(C.OCI_ErrorGetOCICode(ociErr))
+	if code == 0 {
+		code = -1
+	}
+	return &Error{Code: code, Text: C.GoString(C.OCI_ErrorGetString(ociErr))}
 }
 
 type Error struct {
@@ -153,6 +159,15 @@ func (e Error) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, e.Text)
 }
 
+/*
+var ociErrors = make(chan Error, 1000)
+
+//export goErrorHandler
+func goErrorHandler(code C.int, text *C.char) {
+	ociErrors <- Error{Code: int(code), Text: C.GoString(text)}
+}
+*/
+
 var initOnce sync.Once
 
 func initialize() {
@@ -163,8 +178,9 @@ func initialize() {
 		} else {
 			os.Setenv("NLS_LANG", strings.SplitN(nlsLang, ".", 2)[0]+".AL32UTF8")
 		}
+		//if C.initialize() != 0 {
 		if C.OCI_Initialize(nil, nil,
-			C.OCI_ENV_DEFAULT|C.OCI_ENV_THREADED|C.OCI_ENV_CONTEXT|C.OCI_ENV_EVENTS,
+			C.OCI_ENV_CONTEXT|C.OCI_ENV_THREADED|C.OCI_ENV_EVENTS,
 		) != C.TRUE {
 			panic("error initializing OCILIB")
 		}
