@@ -1,6 +1,6 @@
 2013-03-04 Version 3.12.1 Vincent Rogier vince.rogier@ocilib.net
 
-    * Fixed Unicode support (OCI_CHARSET_WIDE and OCI_CHARSET_MIXED)
+    * Fixed Unicode support (OCI_CHARSET_WIDE and OCI_CHARSER_MIXED)
 
       - Unix plaftorms : Fixed OCI_LongWrite() for OCI_CLONG type : string may wrongly be inserted into DB
       - Unix plaftorms : Fixed OCI_LongRead()  for OCI_CLONG type : strings may contain trailing garbage data
@@ -10,12 +10,9 @@
 
     * Miscellaneous fixes
 
-      - Reduced size of buffers used to store string column data when nls_lang is UTF8
-      - Fixed error variable checking in internal call OCI_DirPathArrayToStream()
+     - Reduced size of buffers used to store string column data when nls_lang is UTF8
+     - Fixed error variable checking in internal call OCI_DirPathArrayToStream()
 
-    * Miscellaneous changes
-    
-      - Update all files Copyright strings to current year (2013)
 
 2013-02-07 Version 3.12.0 Vincent Rogier vince.rogier@ocilib.net
 

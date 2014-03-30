@@ -1,0 +1,212 @@
+libocilib_la-lob.lo: lob.c /usr/include/stdc-predef.h ocilib_internal.h \
+ ocilib_types.h ocilib_defs.h ../include/ocilib.h ../config.h \
+ /usr/include/stdlib.h /usr/include/features.h \
+ /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+ /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.8/include/stddef.h \
+ /usr/include/x86_64-linux-gnu/bits/waitflags.h \
+ /usr/include/x86_64-linux-gnu/bits/waitstatus.h /usr/include/endian.h \
+ /usr/include/x86_64-linux-gnu/bits/endian.h \
+ /usr/include/x86_64-linux-gnu/bits/byteswap.h \
+ /usr/include/x86_64-linux-gnu/bits/types.h \
+ /usr/include/x86_64-linux-gnu/bits/typesizes.h \
+ /usr/include/x86_64-linux-gnu/bits/byteswap-16.h \
+ /usr/include/x86_64-linux-gnu/sys/types.h /usr/include/time.h \
+ /usr/include/x86_64-linux-gnu/sys/select.h \
+ /usr/include/x86_64-linux-gnu/bits/select.h \
+ /usr/include/x86_64-linux-gnu/bits/sigset.h \
+ /usr/include/x86_64-linux-gnu/bits/time.h \
+ /usr/include/x86_64-linux-gnu/sys/sysmacros.h \
+ /usr/include/x86_64-linux-gnu/bits/pthreadtypes.h /usr/include/alloca.h \
+ /usr/include/x86_64-linux-gnu/bits/stdlib-bsearch.h \
+ /usr/include/x86_64-linux-gnu/bits/stdlib-float.h /usr/include/stdio.h \
+ /usr/include/libio.h /usr/include/_G_config.h /usr/include/wchar.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.8/include/stdarg.h \
+ /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/sys_errlist.h \
+ /usr/include/x86_64-linux-gnu/bits/stdio.h /usr/include/ctype.h \
+ /usr/include/xlocale.h /usr/include/string.h \
+ /usr/include/x86_64-linux-gnu/bits/string.h \
+ /usr/include/x86_64-linux-gnu/bits/string2.h /usr/include/errno.h \
+ /usr/include/x86_64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/include/x86_64-linux-gnu/asm/errno.h \
+ /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.8/include-fixed/limits.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.8/include-fixed/syslimits.h \
+ /usr/include/limits.h /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/local_lim.h \
+ /usr/include/linux/limits.h \
+ /usr/include/x86_64-linux-gnu/bits/posix2_lim.h oci_import.h \
+ /usr/include/oracle/12.1/client64/oci.h \
+ /usr/include/oracle/12.1/client64/oratypes.h \
+ /usr/include/oracle/12.1/client64/ocidfn.h \
+ /usr/include/oracle/12.1/client64/oci1.h \
+ /usr/include/oracle/12.1/client64/oro.h \
+ /usr/include/oracle/12.1/client64/ori.h \
+ /usr/include/oracle/12.1/client64/ort.h \
+ /usr/include/oracle/12.1/client64/orl.h \
+ /usr/include/oracle/12.1/client64/ociextp.h \
+ /usr/include/oracle/12.1/client64/ociapr.h \
+ /usr/include/oracle/12.1/client64/ociap.h \
+ /usr/include/oracle/12.1/client64/nzt.h \
+ /usr/include/oracle/12.1/client64/nzerror.h \
+ /usr/include/oracle/12.1/client64/ocixmldb.h \
+ /usr/include/oracle/12.1/client64/oci8dp.h \
+ /usr/include/oracle/12.1/client64/ocixstream.h \
+ /usr/include/oracle/12.1/client64/orid.h ocilib_checks.h
+
+/usr/include/stdc-predef.h:
+
+ocilib_internal.h:
+
+ocilib_types.h:
+
+ocilib_defs.h:
+
+../include/ocilib.h:
+
+../config.h:
+
+/usr/include/stdlib.h:
+
+/usr/include/features.h:
+
+/usr/include/x86_64-linux-gnu/sys/cdefs.h:
+
+/usr/include/x86_64-linux-gnu/bits/wordsize.h:
+
+/usr/include/x86_64-linux-gnu/gnu/stubs.h:
+
+/usr/include/x86_64-linux-gnu/gnu/stubs-64.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.8/include/stddef.h:
+
+/usr/include/x86_64-linux-gnu/bits/waitflags.h:
+
+/usr/include/x86_64-linux-gnu/bits/waitstatus.h:
+
+/usr/include/endian.h:
+
+/usr/include/x86_64-linux-gnu/bits/endian.h:
+
+/usr/include/x86_64-linux-gnu/bits/byteswap.h:
+
+/usr/include/x86_64-linux-gnu/bits/types.h:
+
+/usr/include/x86_64-linux-gnu/bits/typesizes.h:
+
+/usr/include/x86_64-linux-gnu/bits/byteswap-16.h:
+
+/usr/include/x86_64-linux-gnu/sys/types.h:
+
+/usr/include/time.h:
+
+/usr/include/x86_64-linux-gnu/sys/select.h:
+
+/usr/include/x86_64-linux-gnu/bits/select.h:
+
+/usr/include/x86_64-linux-gnu/bits/sigset.h:
+
+/usr/include/x86_64-linux-gnu/bits/time.h:
+
+/usr/include/x86_64-linux-gnu/sys/sysmacros.h:
+
+/usr/include/x86_64-linux-gnu/bits/pthreadtypes.h:
+
+/usr/include/alloca.h:
+
+/usr/include/x86_64-linux-gnu/bits/stdlib-bsearch.h:
+
+/usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
+
+/usr/include/stdio.h:
+
+/usr/include/libio.h:
+
+/usr/include/_G_config.h:
+
+/usr/include/wchar.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.8/include/stdarg.h:
+
+/usr/include/x86_64-linux-gnu/bits/stdio_lim.h:
+
+/usr/include/x86_64-linux-gnu/bits/sys_errlist.h:
+
+/usr/include/x86_64-linux-gnu/bits/stdio.h:
+
+/usr/include/ctype.h:
+
+/usr/include/xlocale.h:
+
+/usr/include/string.h:
+
+/usr/include/x86_64-linux-gnu/bits/string.h:
+
+/usr/include/x86_64-linux-gnu/bits/string2.h:
+
+/usr/include/errno.h:
+
+/usr/include/x86_64-linux-gnu/bits/errno.h:
+
+/usr/include/linux/errno.h:
+
+/usr/include/x86_64-linux-gnu/asm/errno.h:
+
+/usr/include/asm-generic/errno.h:
+
+/usr/include/asm-generic/errno-base.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.8/include-fixed/limits.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.8/include-fixed/syslimits.h:
+
+/usr/include/limits.h:
+
+/usr/include/x86_64-linux-gnu/bits/posix1_lim.h:
+
+/usr/include/x86_64-linux-gnu/bits/local_lim.h:
+
+/usr/include/linux/limits.h:
+
+/usr/include/x86_64-linux-gnu/bits/posix2_lim.h:
+
+oci_import.h:
+
+/usr/include/oracle/12.1/client64/oci.h:
+
+/usr/include/oracle/12.1/client64/oratypes.h:
+
+/usr/include/oracle/12.1/client64/ocidfn.h:
+
+/usr/include/oracle/12.1/client64/oci1.h:
+
+/usr/include/oracle/12.1/client64/oro.h:
+
+/usr/include/oracle/12.1/client64/ori.h:
+
+/usr/include/oracle/12.1/client64/ort.h:
+
+/usr/include/oracle/12.1/client64/orl.h:
+
+/usr/include/oracle/12.1/client64/ociextp.h:
+
+/usr/include/oracle/12.1/client64/ociapr.h:
+
+/usr/include/oracle/12.1/client64/ociap.h:
+
+/usr/include/oracle/12.1/client64/nzt.h:
+
+/usr/include/oracle/12.1/client64/nzerror.h:
+
+/usr/include/oracle/12.1/client64/ocixmldb.h:
+
+/usr/include/oracle/12.1/client64/oci8dp.h:
+
+/usr/include/oracle/12.1/client64/ocixstream.h:
+
+/usr/include/oracle/12.1/client64/orid.h:
+
+ocilib_checks.h:

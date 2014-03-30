@@ -1,0 +1,8 @@
+#!/bin/sh -e
+cd $(dirname $0)/ocilib
+./configure --with-oracle-charset=ansi \
+    --with-oracle-headers-path=/usr/include/oracle/12.1/client64 \
+    --with-oracle-lib-path=/usr/lib/oracle/12.1/client64/lib
+make clean
+make -j5
+sudo make install

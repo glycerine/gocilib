@@ -32,12 +32,20 @@ import (
 	"unsafe"
 )
 
+func OString(x string) *C.otext {
+	return (*C.otext)(C.CString(x))
+}
+
+func GString(x *C.otext) string {
+	return C.GoString((*C.char)(x))
+}
+
 func (stmt *Statement) BindPos(pos int, arg driver.Value) error {
 	return stmt.BindName(":"+strconv.Itoa(pos), arg)
 }
 
 func (stmt *Statement) BindName(name string, value driver.Value) error {
-	h, nm, ok := stmt.handle, C.CString(name), C.int(C.FALSE)
+	h, nm, ok := stmt.handle, OString(name), C.int(C.FALSE)
 Outer:
 	switch x := value.(type) {
 	case int16: // short
@@ -65,7 +73,7 @@ Outer:
 	case []uint64:
 		ok = C.OCI_BindArrayOfUnsignedBigInts(h, nm, (*C.big_uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case string:
-		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
+		ok = C.OCI_BindString(h, nm, OString(x), C.uint(len(x)))
 	case []string:
 		m := 0
 		for _, s := range x {

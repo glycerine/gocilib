@@ -100,12 +100,12 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				row[i] = false
 				continue
 			}
-			row[i] = stringToBool(C.GoString(C.OCI_GetString(rs.handle, ui)))
+			row[i] = stringToBool(GString(C.OCI_GetString(rs.handle, ui)))
 		case *bool:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = stringToBool(C.GoString(C.OCI_GetString(rs.handle, ui)))
+				*x = stringToBool(GString(C.OCI_GetString(rs.handle, ui)))
 			}
 		case []byte:
 			if isNull {
@@ -126,12 +126,12 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				row[i] = ""
 				continue
 			}
-			row[i] = C.GoString(C.OCI_GetString(rs.handle, ui))
+			row[i] = GString(C.OCI_GetString(rs.handle, ui))
 		case *string:
 			if isNull {
 				row[i] = nil
 			} else {
-				*x = C.GoString(C.OCI_GetString(rs.handle, ui))
+				*x = GString(C.OCI_GetString(rs.handle, ui))
 			}
 		case time.Time:
 			if isNull {
@@ -154,7 +154,7 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 			case ColNumeric:
 				var s string
 				if cols[i].Scale == 0 && cols[i].Scale == 0 { // FIXME(tgulacsi): how can be scale=prec=0 ?
-					s = C.GoString(C.OCI_GetString(rs.handle, ui))
+					s = GString(C.OCI_GetString(rs.handle, ui))
 					j := strings.Index(s, ".")
 					neg := s[0] == '-'
 					if j >= 0 {
@@ -173,7 +173,7 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 						row[i] = C.OCI_GetBigInt(rs.handle, ui)
 					} else {
 						if s == "" {
-							s = C.GoString(C.OCI_GetString(rs.handle, ui))
+							s = GString(C.OCI_GetString(rs.handle, ui))
 						}
 						var ok bool
 						if row[i], ok = big.NewInt(0).SetString(s, 10); false && !ok {
@@ -197,7 +197,7 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				row[i] = &Statement{handle: C.OCI_GetStatement(rs.handle, ui)}
 			default:
 				//err = fmt.Errorf("FetchInto(%d.): unknown type %T", i, x)
-				row[i] = C.GoString(C.OCI_GetString(rs.handle, ui))
+				row[i] = GString(C.OCI_GetString(rs.handle, ui))
 			}
 		}
 		if err != nil {
@@ -258,9 +258,9 @@ func (rs *Resultset) Columns() []ColDesc {
 		rs.cols = make([]ColDesc, colCount)
 		for i := range rs.cols {
 			c := C.OCI_GetColumn(rs.handle, C.uint(i+1))
-			rs.cols[i].Name = C.GoString(C.OCI_ColumnGetName(c))
+			rs.cols[i].Name = GString(C.OCI_ColumnGetName(c))
 			rs.cols[i].Type = ColType(C.OCI_ColumnGetType(c))
-			rs.cols[i].TypeName = C.GoString(C.OCI_ColumnGetSQLType(c))
+			rs.cols[i].TypeName = GString(C.OCI_ColumnGetSQLType(c))
 			rs.cols[i].InternalSize = int(C.OCI_ColumnGetSize(c))
 			rs.cols[i].Precision = int(C.OCI_ColumnGetPrecision(c))
 			rs.cols[i].Scale = int(C.OCI_ColumnGetScale(c))
@@ -303,7 +303,7 @@ func ociTimestampToTime(od *C.OCI_Timestamp) (time.Time, error) {
 	if C.OCI_TimestampGetTimeZoneOffset(od, &oh, &om) == C.TRUE {
 		var name string
 		b := make([]byte, 32)
-		if C.OCI_TimestampGetTimeZoneName(od, C.int(cap(b)), (*C.char)(unsafe.Pointer(&b[0]))) == C.TRUE {
+		if C.OCI_TimestampGetTimeZoneName(od, C.int(cap(b)), (*C.otext)(unsafe.Pointer(&b[0]))) == C.TRUE {
 			i := bytes.IndexByte(b, 0)
 			if i >= 0 {
 				b = b[:i]

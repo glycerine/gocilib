@@ -71,7 +71,7 @@ func NewConnection(user, passwd, sid string) (*Connection, error) {
 	initialize()
 	connNumMu.Lock()
 	conn := Connection{
-		handle: C.OCI_ConnectionCreate(C.CString(sid), C.CString(user), C.CString(passwd),
+		handle: C.OCI_ConnectionCreate(OString(sid), OString(user), OString(passwd),
 			C.OCI_SESSION_DEFAULT),
 	}
 	if conn.handle == nil {
@@ -147,7 +147,7 @@ func getLastErr() error {
 	if code == 0 {
 		code = -1
 	}
-	return &Error{Code: code, Text: C.GoString(C.OCI_ErrorGetString(ociErr))}
+	return &Error{Code: code, Text: GString(C.OCI_ErrorGetString(ociErr))}
 }
 
 type Error struct {

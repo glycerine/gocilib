@@ -7,7 +7,7 @@
     |                                                                                         |
     |                              Website : http://www.ocilib.net                            |
     |                                                                                         |
-    |             Copyright (c) 2007-2013 Vincent ROGIER <vince.rogier@ocilib.net>            |
+    |             Copyright (c) 2007-2014 Vincent ROGIER <vince.rogier@ocilib.net>            |
     |                                                                                         |
     +-----------------------------------------------------------------------------------------+
     |                                                                                         |
@@ -1335,6 +1335,12 @@ typedef oratext * (*OCISTRINGPTR)
     CONST OCIString *vs
 );
 
+typedef ub4 (*OCISTRINGSIZE) 
+(
+    OCIEnv          *env, 
+    CONST OCIString *vs
+);
+
 typedef sword (*OCISTRINGASSIGNTEXT)
 (
     OCIEnv        *env,
@@ -1516,6 +1522,22 @@ typedef sword (*OCICOLLTRIM)
     OCIError *err,
     sb4       trim_num,
     OCIColl  *coll
+);
+
+typedef sword (*OCITABLESIZE)
+(
+    OCIEnv         *env,
+    OCIError       *err,
+    CONST OCITable *tbl,
+    sb4            *size
+);
+
+typedef sword (*OCITABLEDELETE)
+(
+    OCIEnv      *env,
+    OCIError    *err,
+    sb4          index,
+    OCITable     *tbl
 );
 
 typedef sword (*OCIITERCREATE)
@@ -2069,6 +2091,38 @@ typedef sword (*OCIARRAYDESCRIPTORFREE)
 );
 
 /* API introduced in 11.2 */
+
+typedef sword (*OCILOBGETCONTENTTYPE)
+(
+    OCISvcCtx       *svchp, 
+    OCIError        *errhp,
+    OCILobLocator   *lobp,
+    oratext         *contenttypep, 
+    ub4             *contenttypelenp,
+    ub4              mode
+);
+
+/* API introduced in 12.1 */
+
+#ifdef ORAXB8_DEFINED
+
+typedef sword (*OCIDEFINEBYPOS2)
+(
+    OCIStmt    *stmtp, 
+    OCIDefine **defnp, 
+    OCIError   *errhp,
+    ub4         position, 
+    void       *valuep, 
+    sb8         value_sz, 
+    ub2         dty,
+    void       *indp,
+    ub4        *rlenp, 
+    ub2        *rcodep,
+    ub4         mode
+);
+
+#endif /* ORAXB8_DEFINED */
+
 
 #endif /* OCILIB_OCI_API_H_INCLUDED */
 

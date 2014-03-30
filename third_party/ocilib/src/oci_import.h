@@ -7,7 +7,7 @@
     |                                                                                         |
     |                              Website : http://www.ocilib.net                            |
     |                                                                                         |
-    |             Copyright (c) 2007-2013 Vincent ROGIER <vince.rogier@ocilib.net>            |
+    |             Copyright (c) 2007-2014 Vincent ROGIER <vince.rogier@ocilib.net>            |
     |                                                                                         |
     +-----------------------------------------------------------------------------------------+
     |                                                                                         |
@@ -207,6 +207,7 @@ extern OCINUMBERFROMREAL            OCINumberFromReal;
 extern OCINUMBERTOTEXT              OCINumberToText;
 extern OCINUMBERFROMTEXT            OCINumberFromText;
 extern OCISTRINGPTR                 OCIStringPtr;
+extern OCISTRINGSIZE                OCIStringSize;
 extern OCISTRINGASSIGNTEXT          OCIStringAssignText;
 extern OCIRAWPTR                    OCIRawPtr;
 extern OCIRAWASSIGNBYTES            OCIRawAssignBytes;
@@ -259,6 +260,8 @@ extern OCICOLLASSIGNELEM            OCICollAssignElem;
 extern OCICOLLASSIGN                OCICollAssign;
 extern OCICOLLAPPEND                OCICollAppend;
 extern OCICOLLTRIM                  OCICollTrim;
+extern OCITABLESIZE                 OCITableSize;
+extern OCITABLEDELETE               OCITableDelete;
 extern OCIITERCREATE                OCIIterCreate;
 extern OCIITERDELETE                OCIIterDelete;
 extern OCIITERINIT                  OCIIterInit;
@@ -287,6 +290,7 @@ extern OCISUBSCRIPTIONREGISTER      OCISubscriptionRegister;
 extern OCISUBSCRIPTIONUNREGISTER    OCISubscriptionUnRegister;
 extern XAOSVCCTX                    xaoSvcCtx;
 extern XAOENV                       xaoEnv;
+extern OCILOBGETCONTENTTYPE         OCILobGetContentType;
 
 #ifdef ORAXB8_DEFINED
 
@@ -298,6 +302,7 @@ extern OCILOBREAD2                  OCILobRead2;
 extern OCILOBTRIM2                  OCILobTrim2;
 extern OCILOBWRITE2                 OCILobWrite2;
 extern OCILOBWRITEAPPEND2           OCILobWriteAppend2;
+extern OCIDEFINEBYPOS2              OCIDefineByPos2;
 
 #endif
 

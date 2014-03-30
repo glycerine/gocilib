@@ -254,7 +254,7 @@ func goEventHandler(eventP unsafe.Pointer) {
 		switch op {
 		case C.OCI_ONT_INSERT, C.OCI_ONT_UPDATE, C.OCI_ONT_DELETE:
 			subs.events <- Event{typ: int(typ), op: int(op),
-				rowid: C.GoString(C.OCI_EventGetRowid(event))}
+				rowid: GString(C.OCI_EventGetRowid(event))}
 		default:
 			subs.events <- Event{typ: int(typ), op: int(op)}
 		}

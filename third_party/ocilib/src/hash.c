@@ -7,7 +7,7 @@
     |                                                                                         |
     |                              Website : http://www.ocilib.net                            |
     |                                                                                         |
-    |             Copyright (c) 2007-2013 Vincent ROGIER <vince.rogier@ocilib.net>            |
+    |             Copyright (c) 2007-2014 Vincent ROGIER <vince.rogier@ocilib.net>            |
     |                                                                                         |
     +-----------------------------------------------------------------------------------------+
     |                                                                                         |
@@ -45,21 +45,21 @@
 unsigned int OCI_HashCompute
 (
     OCI_HashTable *table,
-    const mtext   *str
+    const otext   *str
 )
 {
     unsigned int h;
-    mtext *p;
-    mtext c;
+    otext *p;
+    otext c;
 
     OCI_CHECK(table == NULL, 0);
     OCI_CHECK(str   == NULL, 0);
 
-    for(h = 0, p = (mtext *) str; (*p) != 0; p++)
+    for(h = 0, p = (otext *) str; (*p) != 0; p++)
     {
         c = *p;
 
-        h = 31 * h + mttoupper(c);
+        h = 31 * h + otoupper(c);
     }
 
     return (h % table->size);
@@ -80,7 +80,7 @@ OCI_HashTable * OCI_API OCI_HashCreate
 )
 {
     OCI_HashTable *table = NULL;
-    boolean res          = TRUE;
+    boolean res          = FALSE;
 
     /* allocate table structure */
 
@@ -88,23 +88,24 @@ OCI_HashTable * OCI_API OCI_HashCreate
 
     /* set up attributes and allocate internal array of hash entry pointers */
 
-    if (table != NULL)
+    if (table)
     {
-        table->size  = size;
         table->type  = type;
+        table->size  = 0;
         table->count = 0;
 
         table->items = (OCI_HashEntry **) OCI_MemAlloc(OCI_IPC_HASHENTRY_ARRAY,
                                                        sizeof(*table->items),
                                                        (size_t) size, TRUE);
-        res = (table->items != NULL);
-    }
-    else
-    {
-        res = FALSE;
+        if (table->items)
+        {
+            table->size = size;           
+            
+            res = TRUE;
+        }
     }
 
-    if (res == FALSE)
+    if (!res)
     {
         OCI_HashFree(table);
     }
@@ -130,44 +131,44 @@ boolean OCI_API OCI_HashFree
 
     OCI_CHECK_PTR(OCI_IPC_HASHTABLE, table, FALSE);
 
-    for (i = 0; i < table->size; i++)
+    if (table->items)
     {
-        e1 = table->items[i];
-
-        while (e1 != NULL)
+        for (i = 0; i < table->size; i++)
         {
-            e2 = e1;
-            e1 = e1->next;
+            e1 = table->items[i];
 
-            v1 = e2->values;
-
-            while (v1 != NULL)
+            while (e1)
             {
-                v2 = v1;
-                v1 = v1->next;
+                e2 = e1;
+                e1 = e1->next;
 
-                if (table->type == OCI_HASH_STRING)
+                v1 = e2->values;
+
+                while (v1)
                 {
-                    OCI_FREE(v2->value.p_mtext);
+                    v2 = v1;
+                    v1 = v1->next;
+
+                    if (OCI_HASH_STRING == table->type)
+                    {
+                        OCI_FREE(v2->value.p_text);
+                    }
+
+                    OCI_FREE(v2);
                 }
 
-                OCI_FREE(v2);
-            }
+                if (e2->key)
+                {
+                    OCI_FREE(e2->key);
+                }
 
-            if (e2->key)
-            {
-                OCI_FREE(e2->key);
-            }
-
-            if (e2)
-            {
-                OCI_FREE(e2);
+                if (e2)
+                {
+                    OCI_FREE(e2);
+                }
             }
         }
-    }
 
-    if (table->items != NULL)
-    {
         OCI_FREE(table->items);
     }
 
@@ -217,7 +218,7 @@ unsigned int OCI_API OCI_HashGetType
 OCI_HashValue * OCI_API OCI_HashGetValue
 (
     OCI_HashTable *table,
-    const mtext   *key
+    const otext   *key
 )
 {
     OCI_HashEntry *e = NULL;
@@ -227,7 +228,7 @@ OCI_HashValue * OCI_API OCI_HashGetValue
 
     e = OCI_HashLookup(table, key, FALSE);
 
-    if (e != NULL)
+    if (e)
     {
         v = e->values;
     }
@@ -259,23 +260,23 @@ OCI_HashEntry * OCI_API OCI_HashGetEntry
  * OCI_HashGetString
  * --------------------------------------------------------------------------------------------- */
 
-const mtext * OCI_API OCI_HashGetString
+const otext * OCI_API OCI_HashGetString
 (
     OCI_HashTable *table,
-    const mtext   *key
+    const otext   *key
 )
 {
     OCI_HashValue *v   = NULL;
-    const mtext *value = NULL;
+    const otext *value = NULL;
 
     OCI_CHECK_PTR(OCI_IPC_HASHTABLE, table, NULL);
     OCI_CHECK(table->type != OCI_HASH_STRING, NULL);
 
     v = OCI_HashGetValue(table, key);
 
-    if (v != NULL)
+    if (v)
     {
-        value = v->value.p_mtext;
+        value = v->value.p_text;
     }
 
     OCI_RESULT(v != NULL);
@@ -290,7 +291,7 @@ const mtext * OCI_API OCI_HashGetString
 int OCI_API OCI_HashGetInt
 (
     OCI_HashTable *table,
-    const mtext   *key
+    const otext   *key
 )
 {
     OCI_HashValue *v = NULL;
@@ -301,7 +302,7 @@ int OCI_API OCI_HashGetInt
 
     v = OCI_HashGetValue(table, key);
 
-    if (v != NULL)
+    if (v)
     {
         value = v->value.num;
     }
@@ -318,7 +319,7 @@ int OCI_API OCI_HashGetInt
 void * OCI_API OCI_HashGetPointer
 (
     OCI_HashTable *table,
-    const mtext   *key
+    const otext   *key
 )
 {
     OCI_HashValue *v = NULL;
@@ -329,7 +330,7 @@ void * OCI_API OCI_HashGetPointer
 
     v = OCI_HashGetValue(table, key);
 
-    if (v != NULL)
+    if (v)
     {
         value = v->value.p_void;
     }
@@ -346,13 +347,14 @@ void * OCI_API OCI_HashGetPointer
 boolean OCI_HashAdd
 (
     OCI_HashTable *table,
-    const mtext   *key,
+    const otext   *key,
     OCI_Variant    value,
     unsigned int   type
 )
 {
     OCI_HashEntry * e = NULL;
     OCI_HashValue * v = NULL, *v1 = NULL, *v2 = NULL;
+    boolean res = FALSE;
 
     OCI_CHECK(table == NULL, FALSE);
     OCI_CHECK(key   == NULL, FALSE);
@@ -360,17 +362,17 @@ boolean OCI_HashAdd
 
     e = OCI_HashLookup(table, key, TRUE);
 
-    if (e != NULL)
+    if (e)
     {
         v = (OCI_HashValue *) OCI_MemAlloc(OCI_IPC_HASHVALUE, sizeof(*v), (size_t) 1, TRUE);
 
-        if (v != NULL)
+        if (v)
         {
-            if (table->type == OCI_HASH_STRING && value.p_mtext != NULL)
+            if (OCI_HASH_STRING == table->type && value.p_text)
             {
-                v->value.p_mtext = mtsdup(value.p_mtext);
+                v->value.p_text = ostrdup(value.p_text);
             }
-            else if (table->type == OCI_HASH_INTEGER)
+            else if (OCI_HASH_INTEGER == table->type)
             {
                 v->value.num = value.num;
             }
@@ -381,13 +383,13 @@ boolean OCI_HashAdd
 
             v1 = v2 = e->values;
 
-            while (v1 != NULL)
+            while (v1)
             {
                 v2 = v1;
                 v1 = v1->next;
             }
 
-            if (v2 != NULL)
+            if (v2)
             {
                 v2->next = v;
             }
@@ -395,10 +397,14 @@ boolean OCI_HashAdd
             {
                 e->values = v;
             }
+
+            res = TRUE;
         }
     }
+    
+    OCI_RESULT(res);
 
-    return (v != NULL);
+    return res;
 }
 
 /* --------------------------------------------------------------------------------------------- *
@@ -408,8 +414,8 @@ boolean OCI_HashAdd
 boolean OCI_API OCI_HashAddString
 (
     OCI_HashTable *table,
-    const mtext   *key,
-    const mtext   *value
+    const otext   *key,
+    const otext   *value
 )
 {
     boolean res = TRUE;
@@ -417,7 +423,7 @@ boolean OCI_API OCI_HashAddString
 
     OCI_CHECK_PTR(OCI_IPC_HASHTABLE, table, FALSE);
 
-    v.p_mtext = (mtext *) value;
+    v.p_text = (otext *) value;
 
     res = OCI_HashAdd(table, key, v, OCI_HASH_STRING);
 
@@ -433,7 +439,7 @@ boolean OCI_API OCI_HashAddString
 boolean OCI_API OCI_HashAddInt
 (
     OCI_HashTable *table,
-    const mtext   *key,
+    const otext   *key,
     int            value
 )
 {
@@ -458,7 +464,7 @@ boolean OCI_API OCI_HashAddInt
 boolean OCI_API OCI_HashAddPointer
 (
     OCI_HashTable *table,
-    const mtext   *key,
+    const otext   *key,
     void          *value
 )
 {
@@ -483,7 +489,7 @@ boolean OCI_API OCI_HashAddPointer
 OCI_HashEntry * OCI_API OCI_HashLookup
 (
     OCI_HashTable *table,
-    const mtext   *key,
+    const otext   *key,
     boolean        create
 )
 {
@@ -497,31 +503,31 @@ OCI_HashEntry * OCI_API OCI_HashLookup
 
     if (i < table->size)
     {
-        for(e = table->items[i]; e != NULL; e = e->next)
+        for(e = table->items[i]; e; e = e->next)
         {
-            if (mtscasecmp(e->key, key) == 0)
+            if (ostrcasecmp(e->key, key) == 0)
             {
                 break;
             }
         }
 
-        if ((e == NULL) && (create == TRUE))
+        if (!e && create)
         {
             e = (OCI_HashEntry *) OCI_MemAlloc(OCI_IPC_HASHENTRY, sizeof(*e), (size_t) 1, TRUE);
 
-            if (e != NULL)
+            if (e)
             {
-                e->key = mtsdup(key);
+                e->key = ostrdup(key);
 
                 e1 = e2 = table->items[i];
 
-                while (e1 != NULL)
+                while (e1)
                 {
                     e2 = e1;
                     e1 = e1->next;
                 }
 
-                if (e2 != NULL)
+                if (e2)
                 {
                     e2->next = e;
                 }

@@ -62,7 +62,7 @@ func (stmt *Statement) Close() error {
 }
 
 func (stmt *Statement) Prepare(qry string) error {
-	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
+	if C.OCI_Prepare(stmt.handle, OString(qry)) != C.TRUE {
 		return getLastErr()
 	}
 	stmt.statement = qry
@@ -74,11 +74,11 @@ func (stmt *Statement) Prepare(qry string) error {
 // Execute the given query.
 // If qry is "", then the previously prepared/executed query string is used.
 func (stmt *Statement) Execute(qry string) error {
-	var text *C.char
+	var text *C.otext
 	if qry == "" && stmt.statement != "" { // already prepared
-		text = C.CString(stmt.statement)
+		text = OString(stmt.statement)
 	} else {
-		text = C.CString(qry)
+		text = OString(qry)
 	}
 	if C.OCI_ExecuteStmt(stmt.handle, text) != C.TRUE {
 		return getLastErr()
@@ -86,7 +86,7 @@ func (stmt *Statement) Execute(qry string) error {
 	if qry != "" {
 		stmt.statement = qry
 	}
-	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	stmt.verb = GString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return nil
 }
@@ -97,7 +97,7 @@ func (stmt *Statement) BindExecute(
 	arrayArgs []driver.Value,
 	mapArgs map[string]driver.Value,
 ) error {
-	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
+	if C.OCI_Prepare(stmt.handle, OString(qry)) != C.TRUE {
 		return getLastErr()
 	}
 	//if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {

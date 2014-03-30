@@ -7,7 +7,7 @@
     |                                                                                         |
     |                              Website : http://www.ocilib.net                            |
     |                                                                                         |
-    |             Copyright (c) 2007-2013 Vincent ROGIER <vince.rogier@ocilib.net>            |
+    |             Copyright (c) 2007-2014 Vincent ROGIER <vince.rogier@ocilib.net>            |
     |                                                                                         |
     +-----------------------------------------------------------------------------------------+
     |                                                                                         |
@@ -141,66 +141,71 @@ boolean OCI_ArrayClose
 
     OCI_CHECK_PTR(OCI_IPC_ARRAY, arr, FALSE);
 
-    /* Cleanup OCILIB Objects */
-
-    for (i = 0; i < arr->nb_elem; i++)
+    if ( (OCI_CDT_NUMERIC != arr->elem_type ) &&
+         (OCI_CDT_TEXT    != arr->elem_type ) && 
+         (OCI_CDT_RAW     != arr->elem_type ) )
     {
-        switch (arr->elem_type)
+        /* Cleanup OCILIB Objects */
+
+        for (i = 0; i < arr->nb_elem; i++)
         {
-            case OCI_CDT_DATETIME:
+            switch (arr->elem_type)
             {
-                OCI_DateFree((OCI_Date *) arr->tab_obj[i]);
+                case OCI_CDT_DATETIME:
+                {
+                    OCI_DateFree((OCI_Date *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_LOB:
-            {
-                OCI_LobFree((OCI_Lob *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_LOB:
+                {
+                    OCI_LobFree((OCI_Lob *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_FILE:
-            {
-                OCI_FileFree((OCI_File *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_FILE:
+                {
+                    OCI_FileFree((OCI_File *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_TIMESTAMP:
-            {
-                OCI_TimestampFree((OCI_Timestamp *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_TIMESTAMP:
+                {
+                    OCI_TimestampFree((OCI_Timestamp *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_INTERVAL:
-            {
-                OCI_IntervalFree((OCI_Interval *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_INTERVAL:
+                {
+                    OCI_IntervalFree((OCI_Interval *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_OBJECT:
-            {
-                OCI_ObjectFree((OCI_Object *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_OBJECT:
+                {
+                    OCI_ObjectFree((OCI_Object *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_COLLECTION:
-            {
-                OCI_CollFree((OCI_Coll *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_COLLECTION:
+                {
+                    OCI_CollFree((OCI_Coll *) arr->tab_obj[i]);
 
-                break;
-            }
-            case OCI_CDT_REF:
-            {
-                OCI_RefFree((OCI_Ref *) arr->tab_obj[i]);
+                    break;
+                }
+                case OCI_CDT_REF:
+                {
+                    OCI_RefFree((OCI_Ref *) arr->tab_obj[i]);
 
-                break;
+                    break;
+                }
             }
-       }
+        }
     }
 
     /* free OCI descriptors */
 
-    if (arr->handle_type != 0)
+    if (OCI_UNKNOWN != arr->handle_type)
     {
         OCI_DescriptorArrayFree
         (
@@ -244,7 +249,7 @@ OCI_Array * OCI_ArrayCreate
 
     item = OCI_ListAppend(OCILib.arrs, sizeof(*arr));
 
-    if (item != NULL)
+    if (item)
     {
         arr = (OCI_Array *) item->data;
 
@@ -258,11 +263,11 @@ OCI_Array * OCI_ArrayCreate
 
         /* allocate OCILIB Object array */
 
-        if (res == TRUE)
+        if (res)
         {
-            if ( (arr->elem_type != OCI_CDT_NUMERIC ) &&
-                 (arr->elem_type != OCI_CDT_TEXT    ) && 
-                 (arr->elem_type != OCI_CDT_RAW     ))
+            if ( (OCI_CDT_NUMERIC != arr->elem_type ) &&
+                 (OCI_CDT_TEXT    != arr->elem_type ) && 
+                 (OCI_CDT_RAW     != arr->elem_type ) )
             {
                 arr->tab_obj = (void **) OCI_MemAlloc(OCI_IPC_VOID,  sizeof(void *), nb_elem, TRUE);
 
@@ -272,7 +277,7 @@ OCI_Array * OCI_ArrayCreate
 
         /* allocate OCI handle array */
 
-        if (res == TRUE)
+        if (res)
         {
             if (arr->elem_size > 0)
             {
@@ -284,7 +289,7 @@ OCI_Array * OCI_ArrayCreate
 
         /* allocate OCILIB structure array */
 
-        if (res == TRUE)
+        if (res)
         {
             if (arr->struct_size > 0)
             {
@@ -296,11 +301,11 @@ OCI_Array * OCI_ArrayCreate
 
         /* allocate OCI handle descriptors */
 
-        if (res == TRUE)
+        if (res)
         {
             if (handle_type != 0)
             {
-                res = (OCI_SUCCESS == OCI_DescriptorArrayAlloc
+                res =  OCI_SUCCESSFUL(OCI_DescriptorArrayAlloc
                        (
                            (dvoid  *) arr->con->env,
                            (dvoid **) arr->mem_handle,
@@ -312,7 +317,7 @@ OCI_Array * OCI_ArrayCreate
             }
         }
 
-        if ((res == TRUE) && (arr->tab_obj != NULL) && (arr->mem_handle != NULL))
+        if (res && arr->tab_obj && arr->mem_handle)
         {
             res = OCI_ArrayInit(arr, typinf);
         }
@@ -324,7 +329,7 @@ OCI_Array * OCI_ArrayCreate
 
     /* check for failure */
 
-    if (res == FALSE)
+    if (!res)
     {
         OCI_ArrayClose(arr);
         OCI_FREE(arr);
@@ -353,18 +358,18 @@ boolean OCI_ArrayFreeFromHandles
 
     OCI_CHECK(list == NULL, FALSE);
 
-    if (list->mutex != NULL)
+    if (list->mutex)
     {
         OCI_MutexAcquire(list->mutex);
     }
 
     item = list->head;
 
-    while (item != NULL)
+    while (item)
     {
         OCI_Array * tmp_arr = (OCI_Array *) item->data;
 
-        if ((tmp_arr != NULL) && (tmp_arr->tab_obj == handles))
+        if (tmp_arr && ((tmp_arr->tab_obj == handles) || tmp_arr->mem_struct == handles))
         {
             arr = tmp_arr;
             break;
@@ -373,12 +378,12 @@ boolean OCI_ArrayFreeFromHandles
         item = item->next;
     }
 
-    if (list->mutex != NULL)
+    if (list->mutex)
     {
         OCI_MutexRelease(list->mutex);
     }
 
-    if (arr != NULL)
+    if (arr)
     {
         res = OCI_ListRemove(OCILib.arrs, arr);
         OCI_ArrayClose(arr);
@@ -406,18 +411,18 @@ void * OCI_ArrayGetOCIHandlesFromHandles
 
     OCI_CHECK(list == NULL, NULL);
 
-    if (list->mutex != NULL)
+    if (list->mutex)
     {
         OCI_MutexAcquire(list->mutex);
     }
 
     item = list->head;
 
-    while (item != NULL)
+    while (item)
     {
         OCI_Array * tmp_arr = (OCI_Array *) item->data;
 
-        if ((tmp_arr != NULL) && (tmp_arr->tab_obj == handles))
+        if (tmp_arr && (tmp_arr->tab_obj == handles))
         {
             arr = tmp_arr;
             break;
@@ -426,12 +431,12 @@ void * OCI_ArrayGetOCIHandlesFromHandles
         item = item->next;
     }
 
-    if (list->mutex != NULL)
+    if (list->mutex)
     {
         OCI_MutexRelease(list->mutex);
     }
 
-    if (arr != NULL)
+    if (arr)
     {
         ret = arr->mem_handle;
     }

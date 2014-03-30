@@ -7,7 +7,7 @@
     |                                                                                         |
     |                              Website : http://www.ocilib.net                            |
     |                                                                                         |
-    |             Copyright (c) 2007-2013 Vincent ROGIER <vince.rogier@ocilib.net>            |
+    |             Copyright (c) 2007-2014 Vincent ROGIER <vince.rogier@ocilib.net>            |
     |                                                                                         |
     +-----------------------------------------------------------------------------------------+
     |                                                                                         |
@@ -505,6 +505,9 @@
 #define OCI_ERROR_MAXMSG_SIZE   1024         /* max size of an error message */
 #define OCI_LOBMAXSIZE          MINUB4MAXVAL        /* maximum lob data size */
 #define OCI_ROWID_LEN           23
+
+/*---------------------OCIStmtRelease Modes----------------------------------*/
+#define OCI_STRLS_CACHE_DELETE   0x0010                 /* Delete from Cache */
 
 /*-----------------------Handle Definitions----------------------------------*/
 typedef struct OCIEnv OCIEnv;                      /* OCI environment handle */
