@@ -10,6 +10,7 @@ libtool
 src/Makefile
 config.log
 config.status
+libtool
 Makefile
 *.cache
 *~*
