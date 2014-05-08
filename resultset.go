@@ -30,6 +30,9 @@ import (
 	"unsafe"
 )
 
+//UseBigInt shall be true for returning big.Ints
+var UseBigInt = false
+
 var zeroTime time.Time
 
 func (stmt *Statement) Results() (*Resultset, error) {
@@ -152,10 +155,9 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 			}
 			switch cols[i].Type {
 			case ColNumeric:
-				var s string
+				s := strings.Replace(C.GoString(C.OCI_GetString(rs.handle, ui)), ",", ".", 1)
 				if cols[i].Scale == 0 && cols[i].Scale == 0 { // FIXME(tgulacsi): how can be scale=prec=0 ?
-					s = C.GoString(C.OCI_GetString(rs.handle, ui))
-					j := strings.Index(s, ".")
+					j := strings.IndexByte(s, '.')
 					neg := s[0] == '-'
 					if j >= 0 {
 						cols[i].Scale = len(s) - j
@@ -170,18 +172,25 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				if cols[i].Scale == 0 { // integer
 					//fmt.Printf("col[%d]=%+v\n", i, cols[i])
 					if cols[i].Precision <= 19 {
-						row[i] = C.OCI_GetBigInt(rs.handle, ui)
+						row[i] = int64(C.OCI_GetBigInt(rs.handle, ui))
 					} else {
-						if s == "" {
-							s = C.GoString(C.OCI_GetString(rs.handle, ui))
+						ok := false
+						if UseBigInt {
+							row[i], ok = big.NewInt(0).SetString(s, 10)
 						}
-						var ok bool
-						if row[i], ok = big.NewInt(0).SetString(s, 10); false && !ok {
+						if !ok {
 							row[i] = s
 						}
 					}
 				} else {
-					row[i] = float64(C.OCI_GetDouble(rs.handle, ui))
+					ok := false
+					if UseBigInt {
+						row[i], ok = big.NewRat(0, 0).SetString(s)
+					}
+					if !ok {
+						row[i] = s
+					}
+					//row[i] = float64(C.OCI_GetDouble(rs.handle, ui))
 				}
 			case ColDate:
 				row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
