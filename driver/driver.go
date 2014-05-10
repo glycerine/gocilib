@@ -238,10 +238,8 @@ type Driver struct {
 //
 // SID (database identifier) can be a DSN (see goracle/oracle.MakeDSN)
 func (d *Driver) Open(uri string) (driver.Conn, error) {
-	d.user, d.passwd, d.db = gocilib.SplitDSN(uri)
-
 	// Establish the connection
-	cx, err := gocilib.NewConnection(d.user, d.passwd, d.db)
+	cx, err := gocilib.NewConnection(gocilib.SplitDSN(uri))
 	if err != nil {
 		return nil, errgo.Notef(err, "%s/***@%s", d.user, d.db)
 	}
