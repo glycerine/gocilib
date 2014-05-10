@@ -23,6 +23,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -216,11 +217,14 @@ func (r rowsRes) Close() error {
 // DATE, DATETIME, TIMESTAMP are treated as they are in Local time zone
 func (r rowsRes) Next(dest []driver.Value) error {
 	if err := r.rs.Next(); err != nil {
-		return err
+		if err == io.EOF {
+			return io.EOF
+		}
+		return errgo.Mask(err)
 	}
 	err := r.rs.FetchInto(dest)
 	//log.Printf("%#v.FetchInto(%#v): %v", r.rs, dest, err)
-	return err
+	return errgo.Mask(err)
 }
 
 // Driver implements a Driver
