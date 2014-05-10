@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"io"
 	"math/big"
 	"strings"
 	"time"
@@ -48,7 +49,11 @@ type Resultset struct {
 
 func (rs *Resultset) Next() error {
 	if C.OCI_FetchNext(rs.handle) != C.TRUE {
-		return getLastErr()
+		err := getLastErr()
+		if err != nil {
+			return err
+		}
+		return io.EOF
 	}
 	return nil
 }
