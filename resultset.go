@@ -53,7 +53,7 @@ type Resultset struct {
 func (rs *Resultset) Next() error {
 	if C.OCI_FetchNext(rs.handle) != C.TRUE {
 		err := getLastErr()
-		if err != nil {
+		if err != nil && err.(*Error).Code != 0 {
 			return err
 		}
 		return io.EOF
