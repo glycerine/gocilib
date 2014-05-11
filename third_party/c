@@ -1,8 +1,17 @@
 #!/bin/sh -e
 cd $(dirname $0)/ocilib
+headers=$(echo $CGO_CFLAGS | sed -n -e '/oracle/ s!^.*-I\([^ ]*\).*$!\1!p')
+if [ -z "$headers" ]; then
+    headers=$(dirname $(find ${ORACLE_HOME:-/} -type f -name 'oci.h'))
+fi
+libs=$(echo $CGO_LDFLAGS | sed -n -e '/oracle/ s!^.*-L\([^ ]*\).*$!\1!p')
+if [ -z "$libs" ]; then
+    libs=$(dirname $(find ${ORACLE_HOME:-/} -name 'libclntsh.so'))
+fi
+echo "headers=$headers libs=$libs"
 ./configure --with-oracle-charset=ansi \
-    --with-oracle-headers-path=/usr/include/oracle/12.1/client64 \
-    --with-oracle-lib-path=/usr/lib/oracle/12.1/client64/lib
+    --with-oracle-headers-path=$headers \
+    --with-oracle-lib-path=$libs
 make clean
 make -j5
 sudo make install
