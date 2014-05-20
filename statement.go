@@ -25,16 +25,24 @@ import (
 	"database/sql/driver"
 )
 
+const defaultPrefetchMemory = 1 << 20 // 1Mb
+const defaultFetchSize = 100
+
 var BindArraySize = C.uint(1000)
 
+// Statement holds the OCI_Statement handle.
+//
+// PrefetchMemory and FetchSize are set in Statement.Prepare
 type Statement struct {
-	handle    *C.OCI_Statement
-	verb      string
-	bindCount int
+	handle                    *C.OCI_Statement
+	verb                      string
+	bindCount                 int
+	PrefetchMemory, FetchSize uint
 }
 
 func (conn *Connection) NewStatement() (*Statement, error) {
-	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle)}
+	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle),
+		PrefetchMemory: defaultPrefetchMemory, FetchSize: defaultFetchSize}
 	if stmt.handle == nil {
 		return nil, getLastErr()
 	}
@@ -67,12 +75,16 @@ func (stmt *Statement) Prepare(qry string) error {
 	}
 	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
+	return stmt.setFetchSizes()
 	return nil
 }
 
 func (stmt *Statement) Execute(qry string) error {
 	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
+	}
+	if err := stmt.setFetchSizes(); err != nil {
+		return err
 	}
 	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
@@ -87,6 +99,9 @@ func (stmt *Statement) BindExecute(
 ) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
+	}
+	if err := stmt.setFetchSizes(); err != nil {
+		return err
 	}
 	//if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {
 	//	return getLastErr()
@@ -105,6 +120,19 @@ func (stmt *Statement) BindExecute(
 		}
 	}
 	if C.OCI_Execute(stmt.handle) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
+}
+
+func (stmt *Statement) setFetchSizes() error {
+	if stmt.verb != "SELECT" {
+		return nil
+	}
+	if C.OCI_SetPrefetchMemory(stmt.handle, C.uint(stmt.PrefetchMemory)) != C.TRUE {
+		return getLastErr()
+	}
+	if C.OCI_SetFetchSize(stmt.handle, C.uint(stmt.FetchSize)) != C.TRUE {
 		return getLastErr()
 	}
 	return nil
