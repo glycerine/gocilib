@@ -168,5 +168,6 @@ func initialize() {
 		) != C.TRUE {
 			panic("error initializing OCILIB")
 		}
+		os.Setenv("NLS_LANG", nlsLang)
 	})
 }
