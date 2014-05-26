@@ -163,11 +163,12 @@ func initialize() {
 		} else {
 			os.Setenv("NLS_LANG", strings.SplitN(nlsLang, ".", 2)[0]+".AL32UTF8")
 		}
-		if C.OCI_Initialize(nil, nil,
+		ok := C.OCI_Initialize(nil, nil,
 			C.OCI_ENV_DEFAULT|C.OCI_ENV_THREADED|C.OCI_ENV_CONTEXT|C.OCI_ENV_EVENTS,
-		) != C.TRUE {
+		) == C.TRUE
+		os.Setenv("NLS_LANG", nlsLang)
+		if !ok {
 			panic("error initializing OCILIB")
 		}
-		os.Setenv("NLS_LANG", nlsLang)
 	})
 }
