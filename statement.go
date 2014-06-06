@@ -171,3 +171,12 @@ func (stmt *Statement) RowsAffected() int64 {
 	}
 	return int64(C.OCI_GetAffectedRows(stmt.handle))
 }
+
+// Parse will send the qry for parsing to the server.
+// Only good for testing parse errors.
+func (stmt *Statement) Parse(qry string) error {
+	if C.OCI_Parse(stmt.handle, C.CString(qry)) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
+}
