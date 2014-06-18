@@ -126,10 +126,10 @@ func insert_num(t *testing.T, conn *sql.Tx,
 	}
 	(&bigintO).SetString(bigintS, 10)
 	if bigintO.String() != bigint {
-		t.Errorf("bigint mismatch: got %d, awaited %d.", bigintO, bigint)
+		t.Errorf("bigint mismatch: got %s, awaited %s.", bigintO, bigint)
 	}
 	if notintO != notint {
-		t.Errorf("noting mismatch: got %d, awaited %d.", notintO, notint)
+		t.Errorf("notint mismatch: got %f, awaited %f.", notintO, notint)
 	}
 	(&bigrealF).SetString(bigreal)
 	(&bigrealO).SetString(bigrealS)

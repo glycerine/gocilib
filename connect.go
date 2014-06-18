@@ -26,7 +26,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
+
+// Log os a log15.Logger - use gocilib.Log.SetHandler to set it to logging,
+// as by default it uses log15.DiscardHandler.
+var Log = log15.New("lib", "gocilib")
+
+func init() {
+	Log.SetHandler(log15.DiscardHandler())
+}
 
 //SplitDSN splits username/password@sid
 func SplitDSN(dsn string) (username, password, sid string) {

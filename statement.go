@@ -76,7 +76,6 @@ func (stmt *Statement) Prepare(qry string) error {
 	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return stmt.setFetchSizes()
-	return nil
 }
 
 func (stmt *Statement) Execute(qry string) error {
