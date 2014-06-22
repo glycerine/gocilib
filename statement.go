@@ -179,3 +179,30 @@ func (stmt *Statement) Parse(qry string) error {
 	}
 	return nil
 }
+
+// QueryRow mimics *sql.DB.QueryRow, in that it executes the query and then
+// fetches the first row into dest.
+func (stmt *Statement) QueryRow(qry string, args []driver.Value, dest []driver.Value) error {
+	var err error
+	Log.Debug("QueryRow", "qry", qry, "args", args)
+	if len(args) > 0 {
+		err = stmt.BindExecute(qry, args, nil)
+	} else {
+		err = stmt.Execute(qry)
+	}
+	if err != nil {
+		return err
+	}
+	rs, err := stmt.Results()
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+	if err = rs.Next(); err != nil {
+		return err
+	}
+	Log.Debug("FI", "dest", dest)
+	err = rs.FetchInto(dest)
+	Log.Debug("FI", "dest", dest, "error", err)
+	return err
+}
