@@ -24,20 +24,13 @@ package gocilib
 extern OCI_Subscription *libSubsRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
 
 extern const int RowidLength;
-
-extern sb4 libSubsAddStatement(OCI_Subscription *sub, OCI_Statement *stmt);
-
-extern sb4 rawSubsAddStatement(const OCIError *errhp, const OCISubscription *subscrhp, const OCIStmt *stmthp);
-
-extern sb4 rawSetupNotifications(OCISubscription **subscrhpp, OCIEnv *envhp, OCIError *errhp, OCISvcCtx *svchp, OCISession *usrhp, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
 */
 import "C"
 
 import (
 	"bytes"
-	"log"
 	"errors"
-	"math/rand"
+	"log"
 	"strings"
 	"sync"
 	"unsafe"
@@ -61,42 +54,40 @@ type Subscription interface {
 
 type libSubscription struct {
 	handle *C.OCI_Subscription
-	events chan Event
-}
-
-type rawSubscription struct {
-	handle *C.OCISubscription
-	conn   *C.OCI_Connection
-	ID     uint32
+	name   string
 	events chan Event
 }
 
 var (
 	subscriptionsMu  sync.Mutex
-	libSubscriptions map[*C.OCI_Subscription]*libSubscription
-	rawSubscriptions map[uint32]*rawSubscription
+	libSubscriptions map[string]*libSubscription
 )
 
 func (conn *Connection) NewLibSubscription(name string, evt EventType, rowidsNeeded bool, timeout int) (Subscription, error) {
+	subscriptionsMu.Lock()
+	defer subscriptionsMu.Unlock()
+	if libSubscriptions == nil {
+		libSubscriptions = make(map[string]*libSubscription, 1)
+	}
+	if _, ok := libSubscriptions[name]; ok {
+		return nil, errors.New("Subscription " + name + " already registered.")
+	}
+
 	CrowidsNeeded := C.boolean(C.FALSE)
 	if rowidsNeeded {
 		CrowidsNeeded = C.TRUE
 	}
 
 	subs := libSubscription{
+		name: name,
 		handle: C.libSubsRegister(conn.handle, C.CString(name), C.uint(evt),
 			0, C.uint(timeout), CrowidsNeeded),
 	}
 	if subs.handle == nil {
 		return nil, getLastErr()
 	}
-	subscriptionsMu.Lock()
-	defer subscriptionsMu.Unlock()
 
-	if libSubscriptions == nil {
-		libSubscriptions = make(map[*C.OCI_Subscription]*libSubscription, 1)
-	}
-	libSubscriptions[subs.handle] = &subs
+	libSubscriptions[name] = &subs
 	return &subs, nil
 }
 
@@ -104,6 +95,9 @@ func (conn *Connection) NewLibSubscription(name string, evt EventType, rowidsNee
 func (subs *libSubscription) AddStatement(st *Statement) (<-chan Event, error) {
 	if C.OCI_SubscriptionAddStatement(subs.handle, st.handle) != C.TRUE {
 		return nil, getLastErr()
+	}
+	if subs.events == nil {
+		subs.events = make(chan Event, 1)
 	}
 	return subs.events, nil
 }
@@ -121,7 +115,7 @@ func (subs *libSubscription) Close() error {
 	var err error
 	if subs.handle != nil {
 		subscriptionsMu.Lock()
-		delete(libSubscriptions, subs.handle)
+		delete(libSubscriptions, subs.name)
 		subscriptionsMu.Unlock()
 		if C.OCI_SubscriptionUnregister(subs.handle) != C.TRUE {
 			err = getLastErr()
@@ -131,104 +125,14 @@ func (subs *libSubscription) Close() error {
 	return err
 }
 
-func getSubscriptionFromHandle(handle *C.OCI_Subscription) Subscription {
-	if handle == nil {
+func getSubscriptionFromName(name string) *libSubscription {
+	if name == "" {
 		return nil
 	}
 	subscriptionsMu.Lock()
-	subs := libSubscriptions[handle]
+	subs := libSubscriptions[name]
 	subscriptionsMu.Unlock()
 	return subs
-}
-
-func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNeeded bool, timeout int) (Subscription, error) {
-	CrowidsNeeded := C.boolean(C.FALSE)
-	if rowidsNeeded {
-		CrowidsNeeded = C.TRUE
-	}
-	subscriptionID := uint32(rand.Int31())
-
-	subscriptionsMu.Lock()
-	defer subscriptionsMu.Unlock()
-
-	var subshp *C.OCISubscription
-	if C.rawSetupNotifications(
-		&subshp,
-		(*C.OCIEnv)(C.OCI_HandleGetEnvironment()),
-		(*C.OCIError)(C.OCI_HandleGetError(conn.handle)),
-		(*C.OCISvcCtx)(C.OCI_HandleGetContext(conn.handle)), 
-		(*C.OCISession)(C.OCI_HandleGetSession(conn.handle)),
-		C.ub4(subscriptionID), C.ub4(evt), CrowidsNeeded, C.ub4(timeout),
-	) != C.OCI_SUCCESS {
-		var err error = getLastRawError(conn.handle)
-		if err == nil {
-			err = errors.New("rawSetupNotifications failed")
-		}
-		return nil, err
-	}
-	if subshp == nil {
-		return nil, errors.New("subhsp is NULL!")
-	}
-	subs := rawSubscription{handle: subshp, conn: conn.handle,
-		events: make(chan Event, 1), ID: subscriptionID}
-	if rawSubscriptions == nil {
-		rawSubscriptions = make(map[uint32]*rawSubscription, 1)
-	}
-	rawSubscriptions[subscriptionID] = &subs
-	return subs, nil
-}
-
-// AddStatement adds the statement to be watched, and returns the event channel.
-func (subs rawSubscription) AddStatement(st *Statement) (<-chan Event, error) {
-	connHandle := C.OCI_StatementGetConnection(st.handle)
-	rc := C.rawSubsAddStatement(
-		(*C.OCIError)(C.OCI_HandleGetError(connHandle)),
-		subs.handle,
-		(*C.OCIStmt)(C.OCI_HandleGetStatement(st.handle)))
-	if rc != C.TRUE {
-		err := getLastRawError(connHandle)
-		if err.Code == 0 {
-			err = getLastRawError(C.OCI_StatementGetConnection(st.handle))
-			err.Code = int(rc)
-		}
-		return nil, err
-	}
-	return subs.events, nil
-}
-
-// AddQuery is a conveniance function which prepares the query and adds the statement.
-func (subs rawSubscription) AddQuery(conn *Connection, qry string) (<-chan Event, error) {
-	stmt, err := conn.NewPreparedStatement(qry)
-	if err != nil {
-		return nil, err
-	}
-	return subs.AddStatement(stmt)
-}
-
-func (subs rawSubscription) Close() error {
-	var err error
-	if subs.handle != nil {
-		subscriptionsMu.Lock()
-		delete(rawSubscriptions, subs.ID)
-		subscriptionsMu.Unlock()
-		if C.OCISubscriptionUnRegister(
-			(*C.OCISvcCtx)(C.OCI_HandleGetContext(subs.conn)),
-			subs.handle,
-			(*C.OCIError)(C.OCI_HandleGetError(subs.conn)),
-			C.OCI_DEFAULT,
-		) != C.OCI_SUCCESS {
-			err = getLastErr()
-		}
-		subs.handle = nil
-	}
-	return err
-}
-
-func getSubscriptionFromID(ID C.uint) rawSubscription {
-	subscriptionsMu.Lock()
-	subs := rawSubscriptions[uint32(ID)]
-	subscriptionsMu.Unlock()
-	return *subs
 }
 
 type Event struct {
@@ -237,51 +141,39 @@ type Event struct {
 }
 
 //export goNotificationCallback
-func goNotificationCallback(subscriptionID C.uint, notifyType C.uint,
-	table_name *C.char, rows *C.char, num_rows C.int,
-) {
-	log.Printf("CALLBACK ID=%d type=%d", subscriptionID, notifyType)
-	if table_name == nil {
-		return
-	}
-	table := C.GoString(table_name)
-	if rows == nil {
-		return
-	}
-	if num_rows <= 0 {
-		return
-	}
-	all := C.GoStringN(rows, num_rows*C.int(rowidLength))
-	rowids := make([]string, int(num_rows))
-	for i := range rowids {
-		rowids[i] = all[i*rowidLength : (i+1)*rowidLength]
-	}
-	log.Printf("CALLBACK type=%d table=%s rowids=%q", notifyType, table, rowids)
-}
+func goNotificationCallback(Cname *C.char, notifyType, op C.uint, Cdatabase, Cobject, Crowid *C.char) {
+	name := C.GoString(Cname)
+	log.Printf("CALLBACK NAME=%s type=%d", name, notifyType)
 
-//export goEventHandler
-func goEventHandler(eventP unsafe.Pointer) {
-	log.Printf("EVENT %p", eventP)
-	event := (*C.OCI_Event)(eventP)
-	typ := C.OCI_EventGetType(event)
-	op := C.OCI_EventGetOperation(event)
-	handle := C.OCI_EventGetSubscription(event)
-
-	subs := getSubscriptionFromHandle(handle).(*libSubscription)
-	switch typ {
+	subs := getSubscriptionFromName(name)
+	if subs == nil || subs.name == "" {
+		log.Printf("Cannot find subscription name %q.", name)
+		return
+	}
+	var evt Event
+	evt.typ = -1
+	switch notifyType {
 	case C.OCI_ENT_DEREGISTER:
-		subs.events <- Event{typ: C.OCI_ENT_DEREGISTER}
+		evt = Event{typ: int(notifyType)}
 	case C.OCI_ENT_STARTUP, C.OCI_ENT_SHUTDOWN, C.OCI_ENT_SHUTDOWN_ANY, C.OCI_ENT_DROP_DATABASE:
-		subs.events <- Event{typ: int(typ)}
+		evt = Event{typ: int(notifyType)}
 	case C.OCI_ENT_OBJECT_CHANGED:
 		//object := C.OCI_EventGetObject(event)
 		switch op {
 		case C.OCI_ONT_INSERT, C.OCI_ONT_UPDATE, C.OCI_ONT_DELETE:
-			subs.events <- Event{typ: int(typ), op: int(op),
-				rowid: C.GoString(C.OCI_EventGetRowid(event))}
+			evt = Event{typ: int(notifyType), op: int(op),
+				rowid: C.GoString(Crowid)}
 		default:
-			subs.events <- Event{typ: int(typ), op: int(op)}
+			evt = Event{typ: int(notifyType), op: int(op)}
 		}
+	}
+	if evt.typ == -1 {
+		return
+	}
+	select {
+	case subs.events <- evt:
+	default:
+		log.Printf("WARN: cannot send event %v.", evt)
 	}
 }
 

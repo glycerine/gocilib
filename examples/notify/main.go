@@ -26,7 +26,6 @@ import (
 
 func main() {
 	flagConnect := flag.String("connect", "", "DSN to connect to")
-	flagRaw := flag.Bool("raw", false, "use raw methods instead of OCILIB provided")
 	flag.Parse()
 
 	user, passwd, sid := gocilib.SplitDSN(*flagConnect)
@@ -51,18 +50,8 @@ func main() {
 	}
 	defer stmt.Execute("DROP TABLE TST_notify")
 
-	type subscription interface {
-		Close() error
-		AddStatement(st *gocilib.Statement) (<-chan gocilib.Event, error)
-	}
-
 	log.Printf("registering subscription ...")
-	var sub subscription
-	if *flagRaw {
-		sub, err = conn.NewRawSubscription("sub-00", gocilib.EvtAll, true, 300)
-	} else {
-		sub, err = conn.NewLibSubscription("sub-00", gocilib.EvtAll, true, 300)
-	}
+	sub, err := conn.NewLibSubscription("sub-00", gocilib.EvtAll, true, 300)
 	if err != nil || sub == nil {
 		log.Fatalf("error creating subscription: %v", err)
 	}
