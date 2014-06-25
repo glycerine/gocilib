@@ -180,12 +180,13 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 
 // AddStatement adds the statement to be watched, and returns the event channel.
 func (subs rawSubscription) AddStatement(st *Statement) (<-chan Event, error) {
+	connHandle := C.OCI_StatementGetConnection(st.handle)
 	rc := C.rawSubsAddStatement(
-		(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(st.handle))),
+		(*C.OCIError)(C.OCI_HandleGetError(connHandle)),
 		subs.handle,
 		(*C.OCIStmt)(C.OCI_HandleGetStatement(st.handle)))
 	if rc != C.TRUE {
-		err := getLastErr().(*Error)
+		err := getLastRawError(connHandle)
 		if err.Code == 0 {
 			err = getLastRawError(C.OCI_StatementGetConnection(st.handle))
 			err.Code = int(rc)

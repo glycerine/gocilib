@@ -306,8 +306,9 @@ ub4 timeout;
   }
 
   /* Set a PROTO value */
+  /*
   printf("set proto\n");
-  ub1 proto = OCI_SUBSCR_PROTO_HTTP;
+  ub4 proto = OCI_SUBSCR_PROTO_HTTP;
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
                        (dvoid *)&proto, 0,
                        OCI_ATTR_SUBSCR_RECPTPROTO, errhp)) != OCI_SUCCESS) {
@@ -315,7 +316,6 @@ ub4 timeout;
     return rc;
   }
 
-  /* Set a RECPT value */
   printf("set recpt\n");
   const char* recpt = "http://p520:8441";
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
@@ -324,6 +324,8 @@ ub4 timeout;
     OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
     return rc;
   }
+  */
+
   /* Set a operations value */
   printf("set operations\n");
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
