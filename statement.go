@@ -35,7 +35,7 @@ var BindArraySize = C.uint(1000)
 // PrefetchMemory and FetchSize are set in Statement.Prepare
 type Statement struct {
 	handle                    *C.OCI_Statement
-	verb                      string
+	statement, verb           string
 	bindCount                 int
 	PrefetchMemory, FetchSize uint
 }
@@ -64,7 +64,7 @@ func (stmt *Statement) Close() error {
 			return getLastErr()
 		}
 		stmt.handle = nil
-		stmt.verb, stmt.bindCount = "", 0
+		stmt.statement, stmt.verb, stmt.bindCount = "", "", 0
 	}
 	return nil
 }
@@ -73,13 +73,20 @@ func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
+	stmt.statement, stmt.verb = qry, ""
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
 	return stmt.setFetchSizes()
 }
 
+// Execute the given query.
+// If qry is "", then the previously prepared/executed query string is used.
 func (stmt *Statement) Execute(qry string) error {
-	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
+	var text *C.char
+	if qry != "" {
+		stmt.statement = qry
+	}
+	text = C.CString(stmt.statement)
+	if C.OCI_ExecuteStmt(stmt.handle, text) != C.TRUE {
 		return getLastErr()
 	}
 	if err := stmt.setFetchSizes(); err != nil {

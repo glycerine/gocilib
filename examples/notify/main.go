@@ -26,6 +26,7 @@ import (
 
 func main() {
 	flagConnect := flag.String("connect", "", "DSN to connect to")
+	flagWait := flag.Duration("wait", 10*time.Second, "time to wait for notifications")
 	flag.Parse()
 
 	user, passwd, sid := gocilib.SplitDSN(*flagConnect)
@@ -51,20 +52,20 @@ func main() {
 	defer stmt.Execute("DROP TABLE TST_notify")
 
 	log.Printf("registering subscription ...")
-	sub, err := conn.NewSubscription("sub-00", gocilib.EvtAll)
-	if err != nil {
+	sub, err := conn.NewLibSubscription("sub-00", gocilib.EvtAll, true, 300)
+	if err != nil || sub == nil {
 		log.Fatalf("error creating subscription: %v", err)
 	}
 	defer sub.Close()
 
 	log.Printf("sub: %#v", sub)
 
-	st, err := conn.NewStatement()
+	st, err := conn.NewPreparedStatement("SELECT key FROM TST_notify")
 	if err != nil {
 		log.Fatalf("error creating statement: %v", err)
 	}
-	if err = st.Prepare("SELECT * FROM TST_notify"); err != nil {
-		log.Fatalf("error preparing query: %v", err)
+	if err = st.Execute(""); err != nil {
+		log.Fatalf("error executing %s: %v", st, err)
 	}
 	events, err := sub.AddStatement(st)
 	if err != nil {
@@ -91,13 +92,16 @@ func main() {
 			if err := st.Execute(qry); err != nil {
 				log.Printf("%d. ERROR executing %s: %v", i, qry, err)
 			}
+			if err := conn.Commit(); err != nil {
+				log.Printf("%d. ERROR commiting: %v", i, err)
+			}
 			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 
 	select {
-	case <-time.After(30 * time.Second):
-		log.Printf("no event received in 5 seconds")
+	case <-time.After(*flagWait):
+		log.Printf("no event received in %s seconds", *flagWait)
 	case event := <-events:
 		log.Printf("got event %#v", event)
 	}

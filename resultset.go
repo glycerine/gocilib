@@ -178,7 +178,7 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				ref = ref.Elem()
 				pointerOk = ref.CanSet()
 			}
-			Log.Debug("default", "Type", ref.Type(), "isPointer?", isPointer, "pointerOk?", pointerOk, "kind", ref.Kind(),
+			Log.Debug("default", "Type", ref.String(), "isPointer?", isPointer, "pointerOk?", pointerOk, "kind", ref.Kind(),
 				"col.Type", cols[i].Type)
 			switch cols[i].Type {
 			case ColNumeric:
