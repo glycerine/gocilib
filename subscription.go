@@ -23,8 +23,6 @@ package gocilib
 
 extern OCI_Subscription *libSubsRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
 
-//sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
-
 extern const int RowidLength;
 
 extern sb4 libSubsAddStatement(OCI_Subscription *sub, OCI_Statement *stmt);
@@ -38,6 +36,7 @@ import "C"
 import (
 	"bytes"
 	"log"
+	"errors"
 	"math/rand"
 	"strings"
 	"sync"
@@ -154,10 +153,21 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 
 	var subshp *C.OCISubscription
 	if C.rawSetupNotifications(
-		&subshp, conn.handle, C.ub4(subscriptionID), C.ub4(evt),
-		CrowidsNeeded, C.ub4(timeout),
+		&subshp,
+		(*C.OCIEnv)(C.OCI_HandleGetEnvironment()),
+		(*C.OCIError)(C.OCI_HandleGetError(conn.handle)),
+		(*C.OCISvcCtx)(C.OCI_HandleGetContext(conn.handle)), 
+		(*C.OCISession)(C.OCI_HandleGetSession(conn.handle)),
+		C.ub4(subscriptionID), C.ub4(evt), CrowidsNeeded, C.ub4(timeout),
 	) != C.OCI_SUCCESS {
-		return nil, getLastErr()
+		var err error = getLastRawError(conn.handle)
+		if err == nil {
+			err = errors.New("rawSetupNotifications failed")
+		}
+		return nil, err
+	}
+	if subshp == nil {
+		return nil, errors.New("subhsp is NULL!")
 	}
 	subs := rawSubscription{handle: subshp, conn: conn.handle,
 		events: make(chan Event, 1), ID: subscriptionID}
@@ -170,7 +180,10 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 
 // AddStatement adds the statement to be watched, and returns the event channel.
 func (subs rawSubscription) AddStatement(st *Statement) (<-chan Event, error) {
-	rc := C.rawSubsAddStatement(subs.handle, st.handle)
+	rc := C.rawSubsAddStatement(
+		(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(st.handle))),
+		subs.handle,
+		(*C.OCIStmt)(C.OCI_HandleGetStatement(st.handle)))
 	if rc != C.TRUE {
 		err := getLastErr().(*Error)
 		if err.Code == 0 {

@@ -252,12 +252,14 @@ ub4 timeout;
   subscrhp = *subscrhpp;
 
   /* set the namespace to DBCHANGE */
+  printf("Set the namespace\n");
   if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
                         (dvoid *) &namespace, sizeof(ub4),
                         OCI_ATTR_SUBSCR_NAMESPACE, errhp)) != OCI_SUCCESS)
     return rc;
 
   /* Associate a notification callback */
+  printf("associate callback\n");
   if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
               (void *)raw_notification_callback,  0,
               OCI_ATTR_SUBSCR_CALLBACK, errhp)) != OCI_SUCCESS) {
@@ -265,15 +267,19 @@ ub4 timeout;
     return rc;
   }
 
-  /* Allow extraction of rowid information */
-  if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
-                  (dvoid *)&rowids_needed, sizeof(ub4),
-                  OCI_ATTR_CHNF_ROWIDS, errhp)) != OCI_SUCCESS) {
-    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
-    return rc;
+  if (rowids_needed) {
+      /* Allow extraction of rowid information */
+      printf("allow extraction of rowid information\n");
+      if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                      (dvoid *)&rowids_needed, sizeof(ub4),
+                      OCI_ATTR_CHNF_ROWIDS, errhp)) != OCI_SUCCESS) {
+        OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+        return rc;
+      }
   }
 
   /* Provide a client specific context using OCI_ATTR_SUBSCR_CTX */
+  printf("provide context\n");
   if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
                   (dvoid *)&subscriptionID, sizeof(ub4),
                   OCI_ATTR_SUBSCR_CTX, errhp)) != OCI_SUCCESS) {
@@ -282,6 +288,7 @@ ub4 timeout;
   }
 
   /* Set a timeout value */
+  printf("set timeout\n");
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
                        (dvoid *)&timeout, 0,
                        OCI_ATTR_SUBSCR_TIMEOUT, errhp)) != OCI_SUCCESS) {
@@ -290,6 +297,7 @@ ub4 timeout;
   }
 
   /* Set a QOSFLAG value */
+  printf("set qosflag\n");
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
                        (dvoid *)&qosflags, 0,
                        OCI_ATTR_SUBSCR_QOSFLAGS, errhp)) != OCI_SUCCESS) {
@@ -297,7 +305,27 @@ ub4 timeout;
     return rc;
   }
 
+  /* Set a PROTO value */
+  printf("set proto\n");
+  ub1 proto = OCI_SUBSCR_PROTO_HTTP;
+  if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                       (dvoid *)&proto, 0,
+                       OCI_ATTR_SUBSCR_RECPTPROTO, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
+
+  /* Set a RECPT value */
+  printf("set recpt\n");
+  const char* recpt = "http://p520:8441";
+  if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
+                       (dvoid *)recpt, strlen(recpt),
+                       OCI_ATTR_SUBSCR_RECPT, errhp)) != OCI_SUCCESS) {
+    OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
+    return rc;
+  }
   /* Set a operations value */
+  printf("set operations\n");
   if ((rc = OCIAttrSet(subscrhp, OCI_HTYPE_SUBSCRIPTION,
                        (dvoid *)&operations, 0,
                        OCI_ATTR_CHNF_OPERATIONS, errhp)) != OCI_SUCCESS) {
@@ -305,6 +333,7 @@ ub4 timeout;
     return rc;
   }
   /* Create a new registration in the  DBCHANGE namespace */
+  printf("create new registration\n");
   if ((rc = OCISubscriptionRegister(svchp, &subscrhp, 1, errhp, OCI_DEFAULT)) != OCI_SUCCESS) {
     OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
     return rc;
@@ -312,23 +341,6 @@ ub4 timeout;
 
   printf("Created Registration\n");
   return OCI_SUCCESS;
-}
-
-sb4 libSetupNotifications(subscrhpp, con, subscriptionID, operations, rowids_needed, timeout)
-OCI_Subscription **subscrhpp;
-OCI_Connection *con;
-ub4 subscriptionID;
-ub4 operations;
-boolean rowids_needed;
-ub4 timeout;
-{
-    printf("envhp=%x errhp=%x ctxhp=%x seshp=%x\n",
-            OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
-            OCI_HandleGetContext(con), OCI_HandleGetSession(con));
-    return libSetupNotifications(subscrhpp,
-                OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
-                OCI_HandleGetContext(con), OCI_HandleGetSession(con),
-            subscriptionID, rowids_needed, timeout);
 }
 
 void lib_event_handler(OCI_Event *event)
