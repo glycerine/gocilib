@@ -26,6 +26,7 @@ import (
 
 func main() {
 	flagConnect := flag.String("connect", "", "DSN to connect to")
+	flagWait := flag.Duration("wait", 10*time.Second, "time to wait for notifications")
 	flag.Parse()
 
 	user, passwd, sid := gocilib.SplitDSN(*flagConnect)
@@ -99,8 +100,8 @@ func main() {
 	}()
 
 	select {
-	case <-time.After(30 * time.Second):
-		log.Printf("no event received in 5 seconds")
+	case <-time.After(*flagWait):
+		log.Printf("no event received in %s seconds", *flagWait)
 	case event := <-events:
 		log.Printf("got event %#v", event)
 	}

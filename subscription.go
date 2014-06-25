@@ -136,8 +136,8 @@ func getSubscriptionFromName(name string) *libSubscription {
 }
 
 type Event struct {
-	typ, op int
-	rowid   string
+	Type, Op                int
+	Database, Object, RowID string
 }
 
 //export goNotificationCallback
@@ -150,24 +150,23 @@ func goNotificationCallback(Cname *C.char, notifyType, op C.uint, Cdatabase, Cob
 		log.Printf("Cannot find subscription name %q.", name)
 		return
 	}
-	var evt Event
-	evt.typ = -1
+	evt := Event{Type: int(notifyType), Op: int(op), Database: C.GoString(Cdatabase)}
+	ok := false
 	switch notifyType {
 	case C.OCI_ENT_DEREGISTER:
-		evt = Event{typ: int(notifyType)}
+		ok = true
 	case C.OCI_ENT_STARTUP, C.OCI_ENT_SHUTDOWN, C.OCI_ENT_SHUTDOWN_ANY, C.OCI_ENT_DROP_DATABASE:
-		evt = Event{typ: int(notifyType)}
+		ok = true
 	case C.OCI_ENT_OBJECT_CHANGED:
 		//object := C.OCI_EventGetObject(event)
+		ok = true
+		evt.Object = C.GoString(Cobject)
 		switch op {
 		case C.OCI_ONT_INSERT, C.OCI_ONT_UPDATE, C.OCI_ONT_DELETE:
-			evt = Event{typ: int(notifyType), op: int(op),
-				rowid: C.GoString(Crowid)}
-		default:
-			evt = Event{typ: int(notifyType), op: int(op)}
+			evt.RowID = C.GoString(Crowid)
 		}
 	}
-	if evt.typ == -1 {
+	if !ok {
 		return
 	}
 	select {
