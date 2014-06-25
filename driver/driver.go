@@ -51,7 +51,7 @@ type stmt struct {
 // filterErr filters the error, returns driver.ErrBadConn if appropriate
 func filterErr(err *error) error {
 	//log.Printf("filterErr(%v)", err)
-	if oraErr, ok := (*err).(*gocilib.Error); ok {
+	if oraErr, ok := errgo.Cause(*err).(*gocilib.Error); ok {
 		switch oraErr.Code {
 		case 115, 451, 452, 609, 1090, 1092, 1073, 3113, 3114, 3135, 3136, 12153, 12161, 12170, 12224, 12230, 12233, 12510, 12511, 12514, 12518, 12526, 12527, 12528, 12539: //connection errors - try again!
 			*err = driver.ErrBadConn
@@ -85,7 +85,7 @@ func (c conn) Prepare(query string) (driver.Stmt, error) {
 	debug("%p.Prepare(%s)", st, query)
 	err = st.Prepare(query)
 	if filterErr(&err) != nil {
-		return nil, fmt.Errorf("Prepare query: %v", err)
+		return nil, errgo.Notef(err, "Prepare query: %q", query)
 	}
 	return stmt{st: st, statement: query}, nil
 }
@@ -104,7 +104,7 @@ type tx struct {
 // begins a transaction
 func (c conn) Begin() (driver.Tx, error) {
 	if !c.cx.IsConnected() {
-		return nil, errors.New("not connected")
+		return nil, errgo.New("not connected")
 	}
 	return tx{cx: c.cx}, nil
 }
@@ -164,13 +164,13 @@ func (s stmt) run(args []driver.Value) (*rowsRes, error) {
 	var err error
 	//log.Printf("%#v.BindExecute(%#v, %#v)", s.st, s.statement, args)
 	if err = s.st.BindExecute(s.statement, args, nil); filterErr(&err) != nil {
-		return nil, fmt.Errorf("BindExec%#v %q: %v", args, s.statement, err)
+		return nil, errgo.Notef(err, "BindExec%#v %q", args, s.statement)
 	}
 
 	rs, err := s.st.Results()
 	//log.Printf("%#v.Results(): %#v, %v", s.st, rs, err)
 	if filterErr(&err) != nil {
-		return nil, fmt.Errorf("BindExec %q results: %v", s.statement, err)
+		return nil, errgo.Notef(err, "BindExec %q", s.statement)
 	}
 	rr := &rowsRes{rs: rs, cols: rs.Columns()}
 	//log.Printf("%#v.run(%#v): %#v", s, args, rr)
@@ -245,7 +245,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	// Establish the connection
 	cx, err := gocilib.NewConnection(gocilib.SplitDSN(uri))
 	if err != nil {
-		return nil, err
+		return nil, errgo.Notef(err, "%s/***@%s", d.user, d.db)
 	}
 	if d.autocommit {
 		err = cx.SetAutoCommit(true)
@@ -270,5 +270,6 @@ func SetAutoCommit(b bool) {
 }
 
 func init() {
+	gocilib.UseBigInt = false
 	sql.Register("gocilib", &d)
 }

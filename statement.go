@@ -25,16 +25,24 @@ import (
 	"database/sql/driver"
 )
 
+const defaultPrefetchMemory = 1 << 20 // 1Mb
+const defaultFetchSize = 100
+
 var BindArraySize = C.uint(1000)
 
+// Statement holds the OCI_Statement handle.
+//
+// PrefetchMemory and FetchSize are set in Statement.Prepare
 type Statement struct {
-	handle          *C.OCI_Statement
-	statement, verb string
-	bindCount       int
+	handle                    *C.OCI_Statement
+	statement, verb           string
+	bindCount                 int
+	PrefetchMemory, FetchSize uint
 }
 
 func (conn *Connection) NewStatement() (*Statement, error) {
-	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle)}
+	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle),
+		PrefetchMemory: defaultPrefetchMemory, FetchSize: defaultFetchSize}
 	if stmt.handle == nil {
 		return nil, getLastErr()
 	}
@@ -56,7 +64,7 @@ func (stmt *Statement) Close() error {
 			return getLastErr()
 		}
 		stmt.handle = nil
-		stmt.verb, stmt.bindCount = "", 0
+		stmt.statement, stmt.verb, stmt.bindCount = "", "", 0
 	}
 	return nil
 }
@@ -65,26 +73,24 @@ func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
-	stmt.statement = qry
-	stmt.verb = ""
+	stmt.statement, stmt.verb = qry, ""
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
-	return nil
+	return stmt.setFetchSizes()
 }
 
 // Execute the given query.
 // If qry is "", then the previously prepared/executed query string is used.
 func (stmt *Statement) Execute(qry string) error {
 	var text *C.char
-	if qry == "" && stmt.statement != "" { // already prepared
-		text = C.CString(stmt.statement)
-	} else {
-		text = C.CString(qry)
+	if qry != "" {
+		stmt.statement = qry
 	}
+	text = C.CString(stmt.statement)
 	if C.OCI_ExecuteStmt(stmt.handle, text) != C.TRUE {
 		return getLastErr()
 	}
-	if qry != "" {
-		stmt.statement = qry
+	if err := stmt.setFetchSizes(); err != nil {
+		return err
 	}
 	stmt.verb = C.GoString(C.OCI_GetSQLVerb(stmt.handle))
 	stmt.bindCount = int(C.OCI_GetBindCount(stmt.handle))
@@ -99,6 +105,9 @@ func (stmt *Statement) BindExecute(
 ) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
+	}
+	if err := stmt.setFetchSizes(); err != nil {
+		return err
 	}
 	//if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {
 	//	return getLastErr()
@@ -117,6 +126,19 @@ func (stmt *Statement) BindExecute(
 		}
 	}
 	if C.OCI_Execute(stmt.handle) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
+}
+
+func (stmt *Statement) setFetchSizes() error {
+	if stmt.verb != "SELECT" {
+		return nil
+	}
+	if C.OCI_SetPrefetchMemory(stmt.handle, C.uint(stmt.PrefetchMemory)) != C.TRUE {
+		return getLastErr()
+	}
+	if C.OCI_SetFetchSize(stmt.handle, C.uint(stmt.FetchSize)) != C.TRUE {
 		return getLastErr()
 	}
 	return nil
@@ -154,4 +176,40 @@ func (stmt *Statement) RowsAffected() int64 {
 		return int64(C.OCI_GetRowCount(C.OCI_GetResultset(stmt.handle)))
 	}
 	return int64(C.OCI_GetAffectedRows(stmt.handle))
+}
+
+// Parse will send the qry for parsing to the server.
+// Only good for testing parse errors.
+func (stmt *Statement) Parse(qry string) error {
+	if C.OCI_Parse(stmt.handle, C.CString(qry)) != C.TRUE {
+		return getLastErr()
+	}
+	return nil
+}
+
+// QueryRow mimics *sql.DB.QueryRow, in that it executes the query and then
+// fetches the first row into dest.
+func (stmt *Statement) QueryRow(qry string, args []driver.Value, dest []driver.Value) error {
+	var err error
+	Log.Debug("QueryRow", "qry", qry, "args", args)
+	if len(args) > 0 {
+		err = stmt.BindExecute(qry, args, nil)
+	} else {
+		err = stmt.Execute(qry)
+	}
+	if err != nil {
+		return err
+	}
+	rs, err := stmt.Results()
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+	if err = rs.Next(); err != nil {
+		return err
+	}
+	Log.Debug("FI", "dest", dest)
+	err = rs.FetchInto(dest)
+	Log.Debug("FI", "dest", dest, "error", err)
+	return err
 }

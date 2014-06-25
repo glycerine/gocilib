@@ -16,13 +16,23 @@ limitations under the License.
 
 package gocilib
 
-// #cgo LDFLAGS: -locilib -lclntsh
-// #include "ocilib.h"
-// #include "oci.h"
-// extern OCI_Subscription *subscriptionRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
-// sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
-// extern const int RowidLength;
-// extern sb4 subsAddStatement2(OCI_Subscription *sub, OCI_Statement *stmt);
+/*
+#cgo LDFLAGS: -locilib -lclntsh
+#include "ocilib.h"
+#include "oci.h"
+
+extern OCI_Subscription *libSubsRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
+
+//sb4 setupNotifications2(OCISubscription **subscrhpp, OCI_Connection *con, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
+
+extern const int RowidLength;
+
+extern sb4 libSubsAddStatement(OCI_Subscription *sub, OCI_Statement *stmt);
+
+extern sb4 rawSubsAddStatement(const OCIError *errhp, const OCISubscription *subscrhp, const OCIStmt *stmthp);
+
+extern sb4 rawSetupNotifications(OCISubscription **subscrhpp, OCIEnv *envhp, OCIError *errhp, OCISvcCtx *svchp, OCISession *usrhp, ub4 subscriptionID, ub4 operations, boolean rowids_needed, ub4 timeout);
+*/
 import "C"
 
 import (
@@ -75,7 +85,7 @@ func (conn *Connection) NewLibSubscription(name string, evt EventType, rowidsNee
 	}
 
 	subs := libSubscription{
-		handle: C.subscriptionRegister(conn.handle, C.CString(name), C.uint(evt),
+		handle: C.libSubsRegister(conn.handle, C.CString(name), C.uint(evt),
 			0, C.uint(timeout), CrowidsNeeded),
 	}
 	if subs.handle == nil {
@@ -143,7 +153,7 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 	defer subscriptionsMu.Unlock()
 
 	var subshp *C.OCISubscription
-	if C.setupNotifications2(
+	if C.rawSetupNotifications(
 		&subshp, conn.handle, C.ub4(subscriptionID), C.ub4(evt),
 		CrowidsNeeded, C.ub4(timeout),
 	) != C.OCI_SUCCESS {
@@ -160,7 +170,7 @@ func (conn *Connection) NewRawSubscription(name string, evt EventType, rowidsNee
 
 // AddStatement adds the statement to be watched, and returns the event channel.
 func (subs rawSubscription) AddStatement(st *Statement) (<-chan Event, error) {
-	rc := C.subsAddStatement2(subs.handle, st.handle)
+	rc := C.rawSubsAddStatement(subs.handle, st.handle)
 	if rc != C.TRUE {
 		err := getLastErr().(*Error)
 		if err.Code == 0 {

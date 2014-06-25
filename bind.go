@@ -38,14 +38,19 @@ func (stmt *Statement) BindPos(pos int, arg driver.Value) error {
 
 func (stmt *Statement) BindName(name string, value driver.Value) error {
 	h, nm, ok := stmt.handle, C.CString(name), C.int(C.FALSE)
+	//Log.Debug("BindName", "name", name, "value", fmt.Sprintf("%T", value))
 Outer:
 	switch x := value.(type) {
 	case int16: // short
 		ok = C.OCI_BindShort(h, nm, (*C.short)(unsafe.Pointer(&x)))
+	case *int16: // short
+		ok = C.OCI_BindShort(h, nm, (*C.short)(unsafe.Pointer(x)))
 	case []int16:
 		ok = C.OCI_BindArrayOfShorts(h, nm, (*C.short)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case uint16: // unsigned short
 		ok = C.OCI_BindUnsignedShort(h, nm, (*C.ushort)(unsafe.Pointer(&x)))
+	case *uint16: // unsigned short
+		ok = C.OCI_BindUnsignedShort(h, nm, (*C.ushort)(unsafe.Pointer(x)))
 	case []uint16:
 		ok = C.OCI_BindArrayOfUnsignedShorts(h, nm, (*C.ushort)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case int: // int
@@ -54,18 +59,26 @@ Outer:
 		ok = C.OCI_BindArrayOfInts(h, nm, (*C.int)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case uint: // int
 		ok = C.OCI_BindUnsignedInt(h, nm, (*C.uint)(unsafe.Pointer(&x)))
+	case *uint: // int
+		ok = C.OCI_BindUnsignedInt(h, nm, (*C.uint)(unsafe.Pointer(x)))
 	case []uint:
 		ok = C.OCI_BindArrayOfUnsignedInts(h, nm, (*C.uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case int64:
 		ok = C.OCI_BindBigInt(h, nm, (*C.big_int)(unsafe.Pointer(&x)))
+	case *int64:
+		ok = C.OCI_BindBigInt(h, nm, (*C.big_int)(unsafe.Pointer(x)))
 	case []int64:
 		ok = C.OCI_BindArrayOfBigInts(h, nm, (*C.big_int)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case uint64:
 		ok = C.OCI_BindUnsignedBigInt(h, nm, (*C.big_uint)(unsafe.Pointer(&x)))
+	case *uint64:
+		ok = C.OCI_BindUnsignedBigInt(h, nm, (*C.big_uint)(unsafe.Pointer(x)))
 	case []uint64:
 		ok = C.OCI_BindArrayOfUnsignedBigInts(h, nm, (*C.big_uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case string:
 		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
+	case *string:
+		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
 	case []string:
 		m := 0
 		for _, s := range x {
@@ -100,10 +113,14 @@ Outer:
 		ok = C.OCI_BindArrayOfRaws(h, nm, unsafe.Pointer(&y[0]), C.uint(m), C.uint(len(x)))
 	case float32:
 		ok = C.OCI_BindFloat(h, nm, (*C.float)(&x))
+	case *float32:
+		ok = C.OCI_BindFloat(h, nm, (*C.float)(x))
 	case []float32:
 		ok = C.OCI_BindArrayOfFloats(h, nm, (*C.float)(&x[0]), C.uint(len(x)))
 	case float64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x))
+	case *float64:
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
 	case []float64:
 		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
 	case time.Time:
@@ -208,12 +225,12 @@ Outer:
 	default:
 		v := reflect.ValueOf(value)
 		if v.Kind() == reflect.Ptr {
-			return stmt.BindName(name, v.Elem())
+			return stmt.BindName(name, v.Elem().Interface())
 		}
 		return fmt.Errorf("BindName(%s): unknown type %T", name, value)
 	}
 	if ok != C.TRUE {
-		return getLastErr()
+		return fmt.Errorf("BindName(%s): %v", name, getLastErr())
 	}
 	return nil
 }

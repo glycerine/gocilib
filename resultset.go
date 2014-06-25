@@ -26,10 +26,14 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"reflect"
 	"strings"
 	"time"
 	"unsafe"
 )
+
+//UseBigInt shall be true for returning big.Ints
+var UseBigInt = false
 
 var zeroTime time.Time
 
@@ -50,7 +54,7 @@ type Resultset struct {
 func (rs *Resultset) Next() error {
 	if C.OCI_FetchNext(rs.handle) != C.TRUE {
 		err := getLastErr()
-		if err != nil {
+		if err != nil && err.(*Error).Code != 0 {
 			return err
 		}
 		return io.EOF
@@ -73,9 +77,21 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 	var err error
 	for i, v := range row {
 		ui := C.uint(i + 1)
-		//log.Printf("%d: %#v (%T)", i, v, v)
+		Log.Debug("FetchInto", "i", i, "v", fmt.Sprintf("%#v (%T)", v, v))
 		isNull := C.OCI_IsNull(rs.handle, ui) == C.TRUE
 		switch x := v.(type) {
+		case int:
+			if isNull {
+				row[i] = 0
+			} else {
+				row[i] = int(C.OCI_GetBigInt(rs.handle, ui))
+			}
+		case *int:
+			if isNull {
+				row[i] = nil
+			} else {
+				*x = int(C.OCI_GetBigInt(rs.handle, ui))
+			}
 		case int64:
 			if isNull {
 				row[i] = 0
@@ -155,51 +171,124 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 				row[i] = nil
 				continue
 			}
+			ref := reflect.ValueOf(row[i])
+			isPointer := ref.Kind() == reflect.Ptr
+			pointerOk := isPointer
+			if isPointer && !ref.IsNil() {
+				ref = ref.Elem()
+				pointerOk = ref.CanSet()
+			}
+			Log.Debug("default", "Type", ref.Type(), "isPointer?", isPointer, "pointerOk?", pointerOk, "kind", ref.Kind(),
+				"col.Type", cols[i].Type)
 			switch cols[i].Type {
 			case ColNumeric:
-				var s string
-				if cols[i].Scale == 0 && cols[i].Scale == 0 { // FIXME(tgulacsi): how can be scale=prec=0 ?
-					s = C.GoString(C.OCI_GetString(rs.handle, ui))
-					j := strings.Index(s, ".")
-					neg := s[0] == '-'
-					if j >= 0 {
-						cols[i].Scale = len(s) - j
-						cols[i].Precision = len(s) - 1
-					} else {
-						cols[i].Precision = len(s)
-					}
-					if neg {
+				s := strings.Replace(C.GoString(C.OCI_GetString(rs.handle, ui)), ",", ".", 1)
+				if cols[i].Precision <= 0 && cols[i].Scale <= 0 { // FIXME(tgulacsi): how can be scale=prec=0 ?
+					cols[i].Precision, cols[i].Scale = len(s), 0
+					if s[0] == '-' {
 						cols[i].Precision--
 					}
+					j := strings.IndexByte(s, '.')
+					if j >= 0 {
+						cols[i].Precision--
+						cols[i].Scale = len(s) - 1
+					}
 				}
+				Log.Debug("int", "prec", cols[i].Precision, "scale", cols[i].Scale)
 				if cols[i].Scale == 0 { // integer
 					//fmt.Printf("col[%d]=%+v\n", i, cols[i])
 					if cols[i].Precision <= 19 {
-						row[i] = C.OCI_GetBigInt(rs.handle, ui)
-					} else {
-						if s == "" {
-							s = C.GoString(C.OCI_GetString(rs.handle, ui))
+						x := int64(C.OCI_GetBigInt(rs.handle, ui))
+						Log.Debug("ref", "ref", ref, "x", x)
+						if isPointer {
+							if !pointerOk {
+								row[i] = &x
+							} else {
+								Log.Debug("set", "x", x, "vof", reflect.ValueOf(x))
+								ref.SetInt(x)
+								Log.Debug("set", "ref", ref)
+							}
+						} else {
+							row[i] = x
 						}
-						var ok bool
-						if row[i], ok = big.NewInt(0).SetString(s, 10); false && !ok {
-							row[i] = s
+					} else {
+						ok := false
+						if UseBigInt {
+							row[i], ok = row[i].(*big.Int).SetString(s, 10)
+						}
+						if !ok {
+							if isPointer {
+								if pointerOk {
+									ref.Set(reflect.ValueOf(s))
+								} else {
+									row[i] = &s
+								}
+							} else {
+								row[i] = s
+							}
 						}
 					}
 				} else {
-					row[i] = float64(C.OCI_GetDouble(rs.handle, ui))
+					ok := false
+					if UseBigInt {
+						row[i], ok = row[i].(*big.Rat).SetString(s)
+					}
+					if !ok {
+						if isPointer {
+							if pointerOk {
+								ref.Set(reflect.ValueOf(x))
+							} else {
+								row[i] = &s
+							}
+						} else {
+							row[i] = s
+						}
+					}
+					//row[i] = float64(C.OCI_GetDouble(rs.handle, ui))
 				}
 			case ColDate:
-				row[i], err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
+				var t time.Time
+				t, err = ociDateToTime(C.OCI_GetDate(rs.handle, ui))
+				if isPointer {
+					if pointerOk {
+						ref.Set(reflect.ValueOf(t))
+					} else {
+						row[i] = &t
+					}
+				} else {
+					row[i] = t
+				}
 			case ColTimestamp:
-				row[i], err = ociTimestampToTime(C.OCI_GetTimestamp(rs.handle, ui))
+				var t time.Time
+				t, err = ociTimestampToTime(C.OCI_GetTimestamp(rs.handle, ui))
+				if isPointer {
+					if pointerOk {
+						ref.Set(reflect.ValueOf(t))
+					} else {
+						row[i] = &t
+					}
+				} else {
+					row[i] = t
+				}
 			case ColInterval:
-				row[i], err = ociIntervalToDuration(C.OCI_GetInterval(rs.handle, ui))
+				var t time.Duration
+				t, err = ociIntervalToDuration(C.OCI_GetInterval(rs.handle, ui))
+				if isPointer {
+					ref.Set(reflect.ValueOf(t))
+				} else {
+					row[i] = t
+				}
 			case ColRaw:
 				b := make([]byte, cols[i].InternalSize)
 				n := C.OCI_GetRaw(rs.handle, ui, unsafe.Pointer(&b[0]), C.uint(cap(b)))
 				row[i] = b[:n]
 			case ColCursor:
-				row[i] = &Statement{handle: C.OCI_GetStatement(rs.handle, ui)}
+				st := Statement{handle: C.OCI_GetStatement(rs.handle, ui)}
+				if isPointer && pointerOk {
+					ref.Set(reflect.ValueOf(&st))
+				} else {
+					row[i] = &st
+				}
 			default:
 				//err = fmt.Errorf("FetchInto(%d.): unknown type %T", i, x)
 				row[i] = C.GoString(C.OCI_GetString(rs.handle, ui))
@@ -229,6 +318,39 @@ const (
 	ColCollection = ColType(C.OCI_CDT_COLLECTION) // OCI_Coll *
 	ColRef        = ColType(C.OCI_CDT_REF)        // OCI_Ref *
 )
+
+func (ct ColType) String() string {
+	switch ct {
+	case ColNumeric:
+		return "NUMBER"
+	case ColDate:
+		return "DATE"
+	case ColText:
+		return "STRING"
+	case ColLong:
+		return "LONG"
+	case ColCursor:
+		return "CURSOR"
+	case ColLob:
+		return "LOB"
+	case ColFile:
+		return "FILE"
+	case ColTimestamp:
+		return "TIMESTAMP"
+	case ColInterval:
+		return "INTERVAL"
+	case ColRaw:
+		return "RAW"
+	case ColObject:
+		return "OBJECT"
+	case ColCollection:
+		return "COLLECTION"
+	case ColRef:
+		return "REF"
+	default:
+		return "???"
+	}
+}
 
 // ColDesc is a column's description
 type ColDesc struct {

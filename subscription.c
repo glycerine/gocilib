@@ -65,7 +65,7 @@ sword status;
   }
 }
 
-void notification_callback(ctx, subscrhp, payload, payl, descriptor, mode)
+void raw_notification_callback(ctx, subscrhp, payload, payl, descriptor, mode)
 dvoid *ctx;
 OCISubscription *subscrhp;
 dvoid *payload;
@@ -217,7 +217,7 @@ ub4 mode;
 
 
 /* The following routine creates registrations and waits for notifications. */
-sb4 setupNotifications(subscrhpp, envhp, errhp, svchp, usrhp, subscriptionID, operations, rowids_needed, timeout)
+sb4 rawSetupNotifications(subscrhpp, envhp, errhp, svchp, usrhp, subscriptionID, operations, rowids_needed, timeout)
 OCISubscription **subscrhpp;
 OCIEnv *envhp;
 OCIError *errhp;
@@ -259,7 +259,7 @@ ub4 timeout;
 
   /* Associate a notification callback */
   if ((rc = OCIAttrSet (subscrhp, OCI_HTYPE_SUBSCRIPTION,
-              (void *)notification_callback,  0,
+              (void *)raw_notification_callback,  0,
               OCI_ATTR_SUBSCR_CALLBACK, errhp)) != OCI_SUCCESS) {
     OCIHandleFree((dvoid *) subscrhp, (ub4) OCI_HTYPE_SUBSCRIPTION);
     return rc;
@@ -314,8 +314,8 @@ ub4 timeout;
   return OCI_SUCCESS;
 }
 
-sb4 setupNotifications2(subscrhpp, con, subscriptionID, operations, rowids_needed, timeout)
-OCISubscription **subscrhpp;
+sb4 libSetupNotifications(subscrhpp, con, subscriptionID, operations, rowids_needed, timeout)
+OCI_Subscription **subscrhpp;
 OCI_Connection *con;
 ub4 subscriptionID;
 ub4 operations;
@@ -325,29 +325,94 @@ ub4 timeout;
     printf("envhp=%x errhp=%x ctxhp=%x seshp=%x\n",
             OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
             OCI_HandleGetContext(con), OCI_HandleGetSession(con));
-    return setupNotifications(subscrhpp,
+    return libSetupNotifications(subscrhpp,
                 OCI_HandleGetEnvironment(), OCI_HandleGetError(con),
                 OCI_HandleGetContext(con), OCI_HandleGetSession(con),
             subscriptionID, rowids_needed, timeout);
 }
 
+void lib_event_handler(OCI_Event *event)
+{
+    unsigned int type     = OCI_EventGetType(event);
+    unsigned int op       = OCI_EventGetOperation(event);
+    OCI_Subscription *sub = OCI_EventGetSubscription(event);
 
-sb4 subsAddStatement(errhp, subscrhp, stmthp)
-    OCIError *errhp;
-    OCISubscription *subscrhp;
-    OCIStmt *stmthp;
+    printf("** Notification      : %s\n\n", OCI_SubscriptionGetName(sub));
+    printf("...... Database      : %s\n",   OCI_EventGetDatabase(event));
+
+    switch (type)
+    {
+        case OCI_ENT_STARTUP:
+            printf("...... Event         : Startup\n");
+            break;
+        case OCI_ENT_SHUTDOWN:
+            printf("...... Event         : Shutdown\n");
+            break;
+        case OCI_ENT_SHUTDOWN_ANY:
+            printf("...... Event         : Shutdown any\n");
+            break;
+        case OCI_ENT_DROP_DATABASE:
+            printf("...... Event         : drop database\n");
+            break;
+        case OCI_ENT_DEREGISTER:
+            printf("...... Event         : deregister\n");
+            break;
+         case OCI_ENT_OBJECT_CHANGED:
+            
+            printf("...... Event         : object changed\n");
+            printf("........... Object   : %s\n", OCI_EventGetObject(event));
+      
+            switch (op)
+            {
+                case OCI_ONT_INSERT:
+                    printf("........... Action   : insert\n");
+                    break;
+                case OCI_ONT_UPDATE:
+                    printf("........... Action   : update\n");
+                    break;
+                case OCI_ONT_DELETE:
+                    printf("........... Action   : delete\n");
+                    break;
+                case OCI_ONT_ALTER:
+                    printf("........... Action   : alter\n");
+                    break;
+                case OCI_ONT_DROP:
+                    printf("........... Action   : drop\n");
+                    break;
+            }
+                    
+            if (op < OCI_ONT_ALTER)
+                printf("........... Rowid    : %s\n",  OCI_EventGetRowid(event));
+        
+            break;
+    }
+    
+    printf("\n");
+}
+
+OCI_Subscription *libSubsRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed) {
+    return OCI_SubscriptionRegister(conn, name, evt, 
+            lib_event_handler,
+            port, timeout);
+}
+
+
+sb4 rawSubsAddStatement(errhp, subscrhp, stmthp)
+    const OCIError *errhp;
+    const OCISubscription *subscrhp;
+    const OCIStmt *stmthp;
 {
     sb4 rc;
     if ((rc = OCIAttrSet((dvoid *)stmthp, (ub4)OCI_HTYPE_STMT,
             (dvoid *)subscrhp, (ub4)0,
-            (ub4)OCI_ATTR_CHNF_REGHANDLE, errhp)) != OCI_SUCCESS) {
+            (ub4)OCI_ATTR_CHNF_REGHANDLE, (OCIError *)errhp)) != OCI_SUCCESS) {
         printf("stmthp=%x, subscrhp=%x, errhp=%x, rc=%d\n", stmthp, subscrhp, errhp, rc);
     }
     return rc;
 }
 
 
-sb4 subsAddStatement2(sub, stmt)
+sb4 libSubsAddStatement(sub, stmt)
     OCI_Subscription *sub;
     OCI_Statement *stmt;
 {
@@ -356,7 +421,7 @@ sb4 subsAddStatement2(sub, stmt)
                     OCI_HandleGetStatement(stmt),
                     OCI_HandleGetSubscription(sub),
                     OCI_HandleGetError(OCI_StatementGetConnection(stmt)));
-    if ((rc = subsAddStatement(
+    if ((rc = rawSubsAddStatement(
                     OCI_HandleGetError(OCI_StatementGetConnection(stmt)),
                     OCI_HandleGetSubscription(sub),
                     OCI_HandleGetStatement(stmt)
