@@ -30,6 +30,8 @@ import (
 	"strconv"
 	"time"
 	"unsafe"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
 
 func (stmt *Statement) BindPos(pos int, arg driver.Value) error {
@@ -38,7 +40,10 @@ func (stmt *Statement) BindPos(pos int, arg driver.Value) error {
 
 func (stmt *Statement) BindName(name string, value driver.Value) error {
 	h, nm, ok := stmt.handle, C.CString(name), C.int(C.FALSE)
-	//Log.Debug("BindName", "name", name, "value", fmt.Sprintf("%T", value))
+	Log.Debug("BindName", "name", name,
+		"type", log15.Lazy{func() string { return fmt.Sprintf("%T", value) }},
+		"value", log15.Lazy{func() string { return fmt.Sprintf("%#v", value) }},
+	)
 Outer:
 	switch x := value.(type) {
 	case int16: // short
@@ -78,6 +83,7 @@ Outer:
 	case string:
 		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
 	case *string:
+		Log.Debug("BindName","string", *x, "length", len(*x))
 		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
 	case []string:
 		m := 0
@@ -95,7 +101,12 @@ Outer:
 		}
 		ok = C.OCI_BindArrayOfStrings(h, nm, (*C.dtext)(unsafe.Pointer(&x[0])), C.uint(m), C.uint(len(x)))
 	case []byte:
-		ok = C.OCI_BindRaw(h, nm, unsafe.Pointer(&x[0]), C.uint(len(x)))
+		ok = C.OCI_BindRaw(h, nm, unsafe.Pointer(&x[0]), C.uint(cap(x)))
+	/*case *[]byte:
+		if len(*x) == 0 {
+			*x = (*x)[:cap(*x)]
+		}
+		ok = C.OCI_BindString(h, nm, (*C.char)(unsafe.Pointer(&(*x)[0])), C.uint(cap(*x)))*/
 	case [][]byte:
 		m := 0
 		for _, b := range x {

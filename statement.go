@@ -23,12 +23,17 @@ import "C"
 
 import (
 	"database/sql/driver"
+	"errors"
 )
 
 const defaultPrefetchMemory = 1 << 20 // 1Mb
 const defaultFetchSize = 100
 
+// BindArraySize is the size of bind arrays
 var BindArraySize = C.uint(1000)
+
+// ErrEmptyStatement
+var ErrEmptyStatement = errors.New("empty statement")
 
 // Statement holds the OCI_Statement handle.
 //
@@ -40,6 +45,7 @@ type Statement struct {
 	PrefetchMemory, FetchSize uint
 }
 
+// NewStatement creates a new statement
 func (conn *Connection) NewStatement() (*Statement, error) {
 	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle),
 		PrefetchMemory: defaultPrefetchMemory, FetchSize: defaultFetchSize}
@@ -58,6 +64,7 @@ func (conn *Connection) NewPreparedStatement(qry string) (*Statement, error) {
 	return stmt, stmt.Prepare(qry)
 }
 
+// Close closes the statement.
 func (stmt *Statement) Close() error {
 	if stmt.handle != nil {
 		if C.OCI_StatementFree(stmt.handle) != C.TRUE {
@@ -69,6 +76,9 @@ func (stmt *Statement) Close() error {
 	return nil
 }
 
+// Prepare the query for execution.
+// After Prepare, you can Execute/BindExecute the statement already prepared,
+// by executing with empty qry.
 func (stmt *Statement) Prepare(qry string) error {
 	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
@@ -81,14 +91,16 @@ func (stmt *Statement) Prepare(qry string) error {
 // Execute the given query.
 // If qry is "", then the previously prepared/executed query string is used.
 func (stmt *Statement) Execute(qry string) error {
-	var text *C.char
-	if qry != "" {
-		stmt.statement = qry
+	if qry == "" {
+		qry = stmt.statement
 	}
-	text = C.CString(stmt.statement)
-	if C.OCI_ExecuteStmt(stmt.handle, text) != C.TRUE {
+	if qry == "" {
+		return ErrEmptyStatement
+	}
+	if C.OCI_ExecuteStmt(stmt.handle, C.CString(qry)) != C.TRUE {
 		return getLastErr()
 	}
+	stmt.statement = qry
 	if err := stmt.setFetchSizes(); err != nil {
 		return err
 	}
@@ -103,11 +115,19 @@ func (stmt *Statement) BindExecute(
 	arrayArgs []driver.Value,
 	mapArgs map[string]driver.Value,
 ) error {
-	if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
-		return getLastErr()
+	if qry == "" {
+		qry = stmt.statement
 	}
-	if err := stmt.setFetchSizes(); err != nil {
-		return err
+	if qry == "" {
+		return ErrEmptyStatement
+	}
+	if qry != stmt.statement {
+		if C.OCI_Prepare(stmt.handle, C.CString(qry)) != C.TRUE {
+			return getLastErr()
+		}
+		if err := stmt.setFetchSizes(); err != nil {
+			return err
+		}
 	}
 	//if C.OCI_BindArraySetSize(stmt.handle, BindArraySize) != C.TRUE {
 	//	return getLastErr()
