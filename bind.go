@@ -81,10 +81,23 @@ Outer:
 	case []uint64:
 		ok = C.OCI_BindArrayOfUnsignedBigInts(h, nm, (*C.big_uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case string:
-		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
+		m := len(x)
+		if m == 0 {
+			m = 32766
+		}
+		y := make([]byte, m+1)
+		if m > 0 {
+			copy(y, []byte(x))
+		}
+		y[m] = 0 // trailing 0
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(len(x)))
 	case *string:
-		Log.Debug("BindName","string", *x, "length", len(*x))
-		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
+		y := make([]byte, 32767)
+		copy(y, []byte(*x))
+		m := len(*x)
+		y[m] = 0 // trailing 0
+		*x = *(*string)(unsafe.Pointer(&reflect.StringHeader{Data: uintptr(unsafe.Pointer(&y[0])), Len: len(y)}))
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(len(y)))
 	case []string:
 		m := 0
 		for _, s := range x {
@@ -99,14 +112,14 @@ Outer:
 		for i, s := range x {
 			copy(y[i*m:(i+1)*m], []byte(s))
 		}
-		ok = C.OCI_BindArrayOfStrings(h, nm, (*C.dtext)(unsafe.Pointer(&x[0])), C.uint(m), C.uint(len(x)))
+		ok = C.OCI_BindArrayOfStrings(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(m), C.uint(len(x)))
 	case []byte:
 		ok = C.OCI_BindRaw(h, nm, unsafe.Pointer(&x[0]), C.uint(cap(x)))
 	/*case *[]byte:
-		if len(*x) == 0 {
-			*x = (*x)[:cap(*x)]
-		}
-		ok = C.OCI_BindString(h, nm, (*C.char)(unsafe.Pointer(&(*x)[0])), C.uint(cap(*x)))*/
+	if len(*x) == 0 {
+		*x = (*x)[:cap(*x)]
+	}
+	ok = C.OCI_BindString(h, nm, (*C.char)(unsafe.Pointer(&(*x)[0])), C.uint(cap(*x)))*/
 	case [][]byte:
 		m := 0
 		for _, b := range x {

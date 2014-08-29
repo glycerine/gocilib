@@ -77,6 +77,8 @@ var (
 	cleanupT  *time.Timer
 )
 
+// NewConnection creates a new connection to the database, and connects to it.
+// user, passwd, sid can be extracted from a user/passwd@sid text with SplitDSN.
 func NewConnection(user, passwd, sid string) (*Connection, error) {
 	initialize()
 	connNumMu.Lock()

@@ -51,6 +51,7 @@ type Resultset struct {
 	cols   []ColDesc
 }
 
+// Next advances to the next record, and returns io.EOF at the end.
 func (rs *Resultset) Next() error {
 	if C.OCI_FetchNext(rs.handle) != C.TRUE {
 		err := getLastErr()

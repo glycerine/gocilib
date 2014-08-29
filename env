@@ -29,8 +29,10 @@ echo "cdir=$cdir ldir=$ldir"
 export CGO_CFLAGS=-I$cdir
 export CGO_LDFLAGS=-L$ldir
 export NLS_LANG=american_america.AL32UTF8
+export LD_LIBRARY_PATH=$ldir:$LD_LIBRARY_PATH
 
 echo "export ORACLE_HOME=$ORACLE_HOME"
 echo "export CGO_CFLAGS=$CGO_CFLAGS"
 echo "export CGO_LDFLAGS=$CGO_LDFLAGS"
 echo "export NLS_LANG=$NLS_LANG"
+echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
