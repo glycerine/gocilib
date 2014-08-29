@@ -325,6 +325,58 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 	}()
 
 	switch typ {
+	case C.OCI_CDT_NUMERIC:
+		if sub == C.OCI_NUM_FLOAT || sub == C.OCI_NUM_DOUBLE {
+			switch x := dst.(type) {
+			case float32:
+				return float32(*(*C.float)(data)), nil
+			case *float32:
+				*x = float32(*(*C.float)(data))
+			case float64:
+				return float64(*(*C.double)(data)), nil
+			case *float64:
+				*x = float64(*(*C.double)(data))
+			default:
+				return dst, fmt.Errorf("float is needed, not %T", dst)
+			}
+		}
+		switch x := dst.(type) {
+		case int16:
+			return int16(*(*C.short)(data)), nil
+		case *int16:
+			*x = int16(*(*C.short)(data))
+		case uint16:
+			return uint16(*(*C.ushort)(data)), nil
+		case *uint16:
+			*x = uint16(*(*C.ushort)(data))
+		case int32:
+			return int32(*(*C.int)(data)), nil
+		case *int32:
+			*x = int32(*(*C.int)(data))
+		case int:
+			return int(*(*C.int)(data)), nil
+		case *int:
+			*x = int(*(*C.int)(data))
+		case uint32:
+			return uint32(*(*C.uint)(data)), nil
+		case *uint32:
+			*x = uint32(*(*C.uint)(data))
+		case uint:
+			return uint(*(*C.uint)(data)), nil
+		case *uint:
+			*x = uint(*(*C.uint)(data))
+		case int64:
+			return int64(*(*C.long)(data)), nil
+		case *int64:
+			*x = int64(*(*C.long)(data))
+		case uint64:
+			return uint64(*(*C.ulong)(data)), nil
+		case *uint64:
+			*x = uint64(*(*C.ulong)(data))
+		default:
+			return dst, fmt.Errorf("int is needed, not %T", dst)
+		}
+		return dst, nil
 
 	case C.OCI_CDT_DATETIME:
 		var y, m, d, H, M, S C.int
@@ -336,6 +388,25 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local), nil
 		case *time.Time:
 			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
+			return x, nil
+		default:
+			return dst, fmt.Errorf("time needs time.Time, not %T!", dst)
+		}
+
+	case C.OCI_CDT_TIMESTAMP:
+		var y, m, d, H, M, S, f, offH, offM C.int
+		if C.OCI_TimestampGetDateTime((*C.OCI_Timestamp)(data), &y, &m, &d, &H, &M, &S, &f) != C.TRUE {
+			return dst, fmt.Errorf("error reading timestamp: %v", getLastErr())
+		}
+		if C.OCI_TimestampGetTimeZoneOffset((*C.OCI_Timestamp)(data), &offH, &offM) != C.TRUE {
+			return dst, fmt.Errorf("error reading tz offset: %v", getLastErr())
+		}
+		tz := time.FixedZone(fmt.Sprintf("%+02d:%02d", offH, offM), int(offH*3600+offM*60))
+		switch x := dst.(type) {
+		case time.Time:
+			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz), nil
+		case *time.Time:
+			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz)
 			return x, nil
 		default:
 			return dst, fmt.Errorf("time needs time.Time, not %T!", dst)

@@ -38,7 +38,7 @@ func NewStringVar(text string, size int) *StringVar {
 
 // String returns the string representation of the underlying data.
 func (s StringVar) String() string {
-	return string(s.data[:len(s.data)-1])	// strip trailing zero
+	return string(s.data[:len(s.data)-1]) // strip trailing zero
 }
 
 func (s *StringVar) Set(text string) {
@@ -50,15 +50,15 @@ func (s *StringVar) Set(text string) {
 		s.data = make([]byte, size+1)
 	}
 	copy(s.data, []byte(text))
-	s.data[len(text)] = 0	// trailing zero
+	s.data[len(text)] = 0 // trailing zero
 }
 
 func (s StringVar) Len() int {
-	return len(s.data)-1
+	return len(s.data) - 1
 }
 
 func (s StringVar) Cap() int {
-	return cap(s.data)-1
+	return cap(s.data) - 1
 }
 
 func (s StringVar) MarshalText() (text []byte, err error) {

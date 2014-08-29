@@ -111,6 +111,7 @@ func (stmt *Statement) Execute(qry string) error {
 }
 
 // BindExecute binds the given variables (array or map) and then executes the statement.
+// This will fetch the bound variables after the execute, for each OUT binds.
 func (stmt *Statement) BindExecute(
 	qry string,
 	arrayArgs []driver.Value,
