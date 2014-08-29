@@ -38,11 +38,42 @@ func (stmt *Statement) BindPos(pos int, arg driver.Value) error {
 	return stmt.BindName(":"+strconv.Itoa(pos), arg)
 }
 
+type lengther interface {
+	Len() int
+}
+type capaciter interface {
+	Cap() int
+}
+
 func (stmt *Statement) BindName(name string, value driver.Value) error {
 	h, nm, ok := stmt.handle, C.CString(name), C.int(C.FALSE)
 	Log.Debug("BindName", "name", name,
 		"type", log15.Lazy{func() string { return fmt.Sprintf("%T", value) }},
 		"value", log15.Lazy{func() string { return fmt.Sprintf("%#v", value) }},
+		"length", log15.Lazy{func() int {
+			switch x := value.(type) {
+			case []byte:
+				return len(x)
+			case string:
+				return len(x)
+			}
+			if x, ok := value.(lengther); ok {
+				return x.Len()
+			}
+			return -1
+		}},
+		"cap", log15.Lazy{func() int {
+			switch x := value.(type) {
+			case []byte:
+				return cap(x)
+			case string:
+				return len(x)
+			}
+			if x, ok := value.(capaciter); ok {
+				return x.Cap()
+			}
+			return -1
+		}},
 	)
 Outer:
 	switch x := value.(type) {
@@ -81,27 +112,13 @@ Outer:
 	case []uint64:
 		ok = C.OCI_BindArrayOfUnsignedBigInts(h, nm, (*C.big_uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case string:
-		m := len(x)
-		if m == 0 {
-			m = 32766
-		}
-		y := make([]byte, m+1)
-		if m > 0 {
-			copy(y, []byte(x))
-		}
-		y[m] = 0 // trailing 0
-		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(len(x)))
+		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
+	case *string:
+		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
 	case StringVar:
 		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
 	case *StringVar:
 		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
-	case *string:
-		y := make([]byte, 32767)
-		copy(y, []byte(*x))
-		m := len(*x)
-		y[m] = 0 // trailing 0
-		*x = *(*string)(unsafe.Pointer(&reflect.StringHeader{Data: uintptr(unsafe.Pointer(&y[0])), Len: len(y)}))
-		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(len(y)))
 	case []string:
 		m := 0
 		for _, s := range x {
@@ -119,11 +136,6 @@ Outer:
 		ok = C.OCI_BindArrayOfStrings(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(m), C.uint(len(x)))
 	case []byte:
 		ok = C.OCI_BindRaw(h, nm, unsafe.Pointer(&x[0]), C.uint(cap(x)))
-	/*case *[]byte:
-	if len(*x) == 0 {
-		*x = (*x)[:cap(*x)]
-	}
-	ok = C.OCI_BindString(h, nm, (*C.char)(unsafe.Pointer(&(*x)[0])), C.uint(cap(*x)))*/
 	case [][]byte:
 		m := 0
 		for _, b := range x {
@@ -275,4 +287,91 @@ func durationAsDays(d time.Duration) (days, hours, minutes, seconds, millisecond
 	ns -= int64(seconds) * int64(time.Second)
 	milliseconds = int(ns / int64(time.Millisecond))
 	return
+}
+
+func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error) {
+	typ, sub := C.OCI_BindGetType(bnd), C.uint(0)
+	var data unsafe.Pointer
+	switch typ {
+	case C.OCI_CDT_NUMERIC:
+		fallthrough
+	case C.OCI_CDT_LOB:
+		fallthrough
+	case C.OCI_CDT_FILE:
+		sub = C.OCI_BindGetSubtype(bnd)
+
+	case C.OCI_CDT_TIMESTAMP:
+		fallthrough
+	case C.OCI_CDT_LONG:
+		fallthrough
+	case C.OCI_CDT_INTERVAL:
+		sub = C.OCI_BindGetSubtype(bnd)
+		data = C.OCI_BindGetData(bnd)
+
+	case C.OCI_CDT_TEXT:
+		data = C.OCI_BindGetData(bnd)
+	}
+
+	Log.Debug("getBindInto", "bind", bnd,
+		"bind", log15.Lazy{func() string { return fmt.Sprintf("%T", dst) }},
+		"typ", typ, "sub", sub,
+		"dst", log15.Lazy{func() string { return fmt.Sprintf("%#v", dst) }},
+	)
+
+	defer func() {
+		Log.Debug("getBindInto",
+			"res", log15.Lazy{func() string { return fmt.Sprintf("v=%#v (%T)", val, val) }},
+			"error", err)
+	}()
+
+	switch typ {
+
+	case C.OCI_CDT_DATETIME:
+		var y, m, d, H, M, S C.int
+		if C.OCI_DateGetDateTime((*C.OCI_Date)(data), &y, &m, &d, &H, &M, &S) != C.TRUE {
+			return dst, fmt.Errorf("error reading date: %v", getLastErr())
+		}
+		switch x := dst.(type) {
+		case time.Time:
+			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local), nil
+		case *time.Time:
+			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
+			return x, nil
+		default:
+			return dst, fmt.Errorf("time needs time.Time, not %T!", dst)
+		}
+
+	case C.OCI_CDT_TEXT:
+		switch x := dst.(type) {
+		case string:
+			return C.GoString((*C.char)(data)), nil
+		case *string:
+			*x = C.GoString((*C.char)(data))
+			return dst, nil
+		case []byte:
+			return byteString(data), nil
+		case StringVar:
+			return StringVar{data: byteString(data)}, nil
+		case *StringVar:
+			x.data = byteString(data)
+			return x, nil
+		default:
+			return dst, fmt.Errorf("text needs string, not %T!", dst)
+		}
+	}
+	return dst, nil
+}
+
+func byteString(data unsafe.Pointer) []byte {
+	if data == nil {
+		return nil
+	}
+	b := (*[32767]byte)(data)[0:32767:32767]
+	for i, c := range b {
+		if c == 0 {
+			b = b[:i]
+			break
+		}
+	}
+	return b[:len(b):len(b)]
 }

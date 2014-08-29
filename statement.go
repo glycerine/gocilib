@@ -48,7 +48,8 @@ type Statement struct {
 // NewStatement creates a new statement
 func (conn *Connection) NewStatement() (*Statement, error) {
 	stmt := Statement{handle: C.OCI_StatementCreate(conn.handle),
-		PrefetchMemory: defaultPrefetchMemory, FetchSize: defaultFetchSize}
+		PrefetchMemory: defaultPrefetchMemory, FetchSize: defaultFetchSize,
+	}
 	if stmt.handle == nil {
 		return nil, getLastErr()
 	}
@@ -148,6 +149,31 @@ func (stmt *Statement) BindExecute(
 	if C.OCI_Execute(stmt.handle) != C.TRUE {
 		return getLastErr()
 	}
+
+	if len(arrayArgs) > 0 {
+		for i, value := range arrayArgs {
+			bnd := C.OCI_GetBind(stmt.handle, C.uint(i+1))
+			if C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
+				continue
+			}
+			var err error
+			if arrayArgs[i], err = getBindInto(value, bnd); err != nil {
+				return err
+			}
+		}
+	} else if len(mapArgs) > 0 {
+		for nm, value := range mapArgs {
+			bnd := C.OCI_GetBind2(stmt.handle, C.CString(nm))
+			if C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
+				continue
+			}
+			var err error
+			if mapArgs[nm], err = getBindInto(value, bnd); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
