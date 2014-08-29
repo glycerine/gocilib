@@ -91,6 +91,10 @@ Outer:
 		}
 		y[m] = 0 // trailing 0
 		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&y[0])), C.uint(len(x)))
+	case StringVar:
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
+	case *StringVar:
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
 	case *string:
 		y := make([]byte, 32767)
 		copy(y, []byte(*x))
