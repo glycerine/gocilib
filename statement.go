@@ -191,10 +191,13 @@ func (stmt *Statement) setFetchSizes() error {
 	return nil
 }
 
+// Verb returns the statement's Verb (SELECT/INSERT/UPDATE/DELETE).
 func (stmt *Statement) Verb() string {
 	return stmt.verb
 }
 
+// IsDDL returns whether the statement is of Data Definition Language (change database structure).
+// This is the opposite of being a DML (Data Modification Language), SELECT/INSERT/UPDATE/DELETE.
 func (stmt *Statement) IsDDL() bool {
 	switch stmt.Verb() {
 	case "SELECT", "INSERT", "UPDATE", "DELETE":
@@ -204,6 +207,7 @@ func (stmt *Statement) IsDDL() bool {
 	}
 }
 
+// BindCount returns the number of bind variables.
 func (stmt *Statement) BindCount() (int, error) {
 	if stmt.bindCount <= 0 && stmt.Verb() == "" { // haven't been Prepared/Executed yet
 		names, err := getBindInfo(
@@ -218,6 +222,7 @@ func (stmt *Statement) BindCount() (int, error) {
 	return stmt.bindCount, nil
 }
 
+// RowsAffected returns the number of rows affected.
 func (stmt *Statement) RowsAffected() int64 {
 	if stmt.Verb() == "SELECT" {
 		return int64(C.OCI_GetRowCount(C.OCI_GetResultset(stmt.handle)))

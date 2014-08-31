@@ -67,6 +67,7 @@ func SplitDSN(dsn string) (username, password, sid string) {
 	return
 }
 
+// Connection holds OCI_Connection*.
 type Connection struct {
 	handle *C.OCI_Connection
 }
@@ -95,6 +96,7 @@ func NewConnection(user, passwd, sid string) (*Connection, error) {
 	return &conn, (&conn).SetAutoCommit(false)
 }
 
+// IsConnected returns whether the connection is alive.
 func (conn *Connection) IsConnected() bool {
 	if conn != nil && conn.handle != nil {
 		return C.OCI_IsConnected(conn.handle) == C.TRUE
@@ -102,6 +104,7 @@ func (conn *Connection) IsConnected() bool {
 	return false
 }
 
+// SetAutoCommit sets the autocommit behaviour on the connection.
 func (conn *Connection) SetAutoCommit(commit bool) error {
 	c := C.int(C.TRUE)
 	if !commit {
@@ -113,6 +116,7 @@ func (conn *Connection) SetAutoCommit(commit bool) error {
 	return nil
 }
 
+// Commit commit's the connection's actual transaction.
 func (conn *Connection) Commit() error {
 	if conn != nil && conn.handle != nil {
 		if C.OCI_Commit(conn.handle) != C.TRUE {
@@ -122,6 +126,7 @@ func (conn *Connection) Commit() error {
 	return nil
 }
 
+// Rollback rolls back the connection's actual transaction.
 func (conn *Connection) Rollback() error {
 	if conn != nil && conn.handle != nil {
 		if C.OCI_Rollback(conn.handle) != C.TRUE {
@@ -162,11 +167,13 @@ func getLastErr() error {
 	return &Error{Code: code, Text: C.GoString(C.OCI_ErrorGetString(ociErr))}
 }
 
+// Error holds the error code and the full text of the Oracle error.
 type Error struct {
 	Code int
 	Text string
 }
 
+// Error returns the string representation of the error.
 func (e Error) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, e.Text)
 }

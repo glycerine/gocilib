@@ -37,6 +37,7 @@ var UseBigInt = false
 
 var zeroTime time.Time
 
+// Results returns the Resultset of the statement.
 func (stmt *Statement) Results() (*Resultset, error) {
 	rs := C.OCI_GetResultset(stmt.handle)
 	if rs == nil {
@@ -45,6 +46,7 @@ func (stmt *Statement) Results() (*Resultset, error) {
 	return &Resultset{handle: rs, stmt: stmt}, nil
 }
 
+// Resultset is the SELECT's resultset.
 type Resultset struct {
 	handle *C.OCI_Resultset
 	stmt   *Statement
@@ -63,15 +65,18 @@ func (rs *Resultset) Next() error {
 	return nil
 }
 
+// Close closes the statement.
 func (rs *Resultset) Close() error {
 	rs.handle = nil
 	return nil
 }
 
+// RowsAffected returns the number of rows affected by the statement.
 func (rs *Resultset) RowsAffected() int64 {
 	return rs.stmt.RowsAffected()
 }
 
+// FetchInto fetches the result columns into the given slice.
 func (rs *Resultset) FetchInto(row []driver.Value) error {
 	//log.Printf("%#v.FetchInto(%#v)", rs, row)
 	cols := rs.Columns()
@@ -302,22 +307,36 @@ func (rs *Resultset) FetchInto(row []driver.Value) error {
 	return err
 }
 
+// ColType is the column type.
 type ColType uint8
 
 const (
-	ColNumeric    = ColType(C.OCI_CDT_NUMERIC)    // short, int, long long, float, double
-	ColDate       = ColType(C.OCI_CDT_DATETIME)   // OCI_Date *
-	ColText       = ColType(C.OCI_CDT_TEXT)       // dtext *
-	ColLong       = ColType(C.OCI_CDT_LONG)       // OCI_Long *
-	ColCursor     = ColType(C.OCI_CDT_CURSOR)     // OCI_Statement *
-	ColLob        = ColType(C.OCI_CDT_LOB)        // OCI_Lob *
-	ColFile       = ColType(C.OCI_CDT_FILE)       // OCI_File *
-	ColTimestamp  = ColType(C.OCI_CDT_TIMESTAMP)  // OCI_Timestamp *
-	ColInterval   = ColType(C.OCI_CDT_INTERVAL)   // OCI_Interval *
-	ColRaw        = ColType(C.OCI_CDT_RAW)        // void *
-	ColObject     = ColType(C.OCI_CDT_OBJECT)     // OCI_Object *
-	ColCollection = ColType(C.OCI_CDT_COLLECTION) // OCI_Coll *
-	ColRef        = ColType(C.OCI_CDT_REF)        // OCI_Ref *
+	// ColNumeric - short, int, long long, float, double
+	ColNumeric = ColType(C.OCI_CDT_NUMERIC)
+	// ColDate - OCI_Date *
+	ColDate = ColType(C.OCI_CDT_DATETIME)
+	// ColText - dtext *
+	ColText = ColType(C.OCI_CDT_TEXT)
+	// ColLong - OCI_Long *
+	ColLong = ColType(C.OCI_CDT_LONG)
+	// ColCursor - OCI_Statement *
+	ColCursor = ColType(C.OCI_CDT_CURSOR)
+	// ColLob - OCI_Lob *
+	ColLob = ColType(C.OCI_CDT_LOB)
+	// ColFile - OCI_File *
+	ColFile = ColType(C.OCI_CDT_FILE)
+	// ColTimestamp - OCI_Timestamp *
+	ColTimestamp = ColType(C.OCI_CDT_TIMESTAMP)
+	// ColInterval - OCI_Interval*
+	ColInterval = ColType(C.OCI_CDT_INTERVAL)
+	// ColRaw - void *
+	ColRaw = ColType(C.OCI_CDT_RAW)
+	// ColObject - OCI_Object *
+	ColObject = ColType(C.OCI_CDT_OBJECT)
+	// ColCollection - OCI_Coll *
+	ColCollection = ColType(C.OCI_CDT_COLLECTION)
+	// ColRef - OCI_Ref *
+	ColRef = ColType(C.OCI_CDT_REF)
 )
 
 func (ct ColType) String() string {
@@ -380,6 +399,7 @@ type ColDesc struct {
 	Nullable bool
 }
 
+// Columns returns the column descriptions. The result is cached.
 func (rs *Resultset) Columns() []ColDesc {
 	if rs.cols == nil {
 		colCount := int(C.OCI_GetColumnCount(rs.handle))

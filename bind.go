@@ -118,6 +118,11 @@ Outer:
 		if ok == C.TRUE && !x.Valid {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}
+	case *sqlhlp.NullInt64:
+		ok = C.OCI_BindBigInt(h, nm, (*C.big_int)(unsafe.Pointer(&x.Int64)))
+		if ok == C.TRUE && !x.Valid {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
 
 	case string:
 		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
@@ -125,8 +130,14 @@ Outer:
 		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
 	case StringVar:
 		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(cap(x.data)))
+		if ok == C.TRUE && len(x.data) == 0 {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
 	case *StringVar:
 		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(cap(x.data)))
+		if ok == C.TRUE && len(x.data) == 0 {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
 	case []string:
 		m := 0
 		for _, s := range x {
@@ -172,6 +183,11 @@ Outer:
 	case []float64:
 		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
 	case sqlhlp.NullFloat64:
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
+		if ok == C.TRUE && !x.Valid {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+	case *sqlhlp.NullFloat64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
 		if ok == C.TRUE && !x.Valid {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))

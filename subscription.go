@@ -38,15 +38,21 @@ import (
 
 var rowidLength = int(C.RowidLength)
 
+// EventType is the type of the event.
 type EventType int
 
 const (
-	EvtAll       = EventType(C.OCI_CNT_ALL)       // request for all changes
-	EvtRows      = EventType(C.OCI_CNT_ROWS)      // request for changes at rows level (DML)
-	EvtDatabases = EventType(C.OCI_CNT_DATABASES) // request for changes at database level (startup, shutdown)
-	EvtObjects   = EventType(C.OCI_CNT_OBJECTS)   // request for changes at objects (eg. tables) level (DDL / DML)
+	// EvtAll request for all changes
+	EvtAll = EventType(C.OCI_CNT_ALL)
+	//EvtRows request for changes at rows level (DML)
+	EvtRows = EventType(C.OCI_CNT_ROWS)
+	// EvtDatabases request for changes at database level (startup, shutdown)
+	EvtDatabases = EventType(C.OCI_CNT_DATABASES)
+	// EvtObjects request for changes at objects (eg. tables) level (DDL / DML)
+	EvtObjects = EventType(C.OCI_CNT_OBJECTS)
 )
 
+// Subscription is the interface all subscription implementations must implement.
 type Subscription interface {
 	AddStatement(st *Statement) (<-chan Event, error)
 	Close() error
@@ -63,6 +69,7 @@ var (
 	libSubscriptions map[string]*libSubscription
 )
 
+// NewLibSubscription registers a new subscription using OCILIB's functions.
 func (conn *Connection) NewLibSubscription(name string, evt EventType, rowidsNeeded bool, timeout int) (Subscription, error) {
 	subscriptionsMu.Lock()
 	defer subscriptionsMu.Unlock()
@@ -135,6 +142,7 @@ func getSubscriptionFromName(name string) *libSubscription {
 	return subs
 }
 
+// Event holds the info about an event.
 type Event struct {
 	Type, Op                int
 	Database, Object, RowID string
