@@ -31,6 +31,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tgulacsi/gocilib/sqlhlp"
 	"gopkg.in/inconshreveable/log15.v2"
 )
 
@@ -111,6 +112,13 @@ Outer:
 		ok = C.OCI_BindUnsignedBigInt(h, nm, (*C.big_uint)(unsafe.Pointer(x)))
 	case []uint64:
 		ok = C.OCI_BindArrayOfUnsignedBigInts(h, nm, (*C.big_uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
+
+	case sqlhlp.NullInt64:
+		ok = C.OCI_BindBigInt(h, nm, (*C.big_int)(unsafe.Pointer(&x.Int64)))
+		if ok == C.TRUE && !x.Valid {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+
 	case string:
 		ok = C.OCI_BindString(h, nm, C.CString(x), C.uint(len(x)))
 	case *string:
@@ -163,6 +171,12 @@ Outer:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
 	case []float64:
 		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
+	case sqlhlp.NullFloat64:
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
+		if ok == C.TRUE && !x.Valid {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+
 	case time.Time:
 		od := C.OCI_DateCreate(C.OCI_StatementGetConnection(stmt.handle))
 		y, m, d := x.Date()
@@ -324,18 +338,41 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			"error", err)
 	}()
 
+	isNull := data == nil || C.OCI_BindIsNull(bnd) == C.TRUE
+
 	switch typ {
 	case C.OCI_CDT_NUMERIC:
 		if sub == C.OCI_NUM_FLOAT || sub == C.OCI_NUM_DOUBLE {
+			var f float64
+			if data != nil && !isNull {
+				if sub == C.OCI_NUM_DOUBLE {
+					f = float64(*(*C.double)(data))
+				} else {
+					f = float64(float32(*(*C.float)(data)))
+				}
+			}
 			switch x := dst.(type) {
 			case float32:
-				return float32(*(*C.float)(data)), nil
+				return float32(f), nil
 			case *float32:
-				*x = float32(*(*C.float)(data))
+				*x = float32(f)
 			case float64:
-				return float64(*(*C.double)(data)), nil
+				return f, nil
 			case *float64:
-				*x = float64(*(*C.double)(data))
+				*x = f
+
+			case sqlhlp.NullFloat64:
+				if isNull {
+					return sqlhlp.NullFloat64{Valid: false}, nil
+				}
+				return sqlhlp.NullFloat64{Valid: true, Float64: f}, nil
+			case *sqlhlp.NullFloat64:
+				if isNull {
+					x.Valid = false
+				} else {
+					x.Valid = true
+					x.Float64 = f
+				}
 			default:
 				return dst, fmt.Errorf("float is needed, not %T", dst)
 			}
@@ -373,6 +410,33 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			return uint64(*(*C.ulong)(data)), nil
 		case *uint64:
 			*x = uint64(*(*C.ulong)(data))
+
+		case sqlhlp.NullInt64:
+			if C.OCI_BindIsNull(bnd) == C.TRUE {
+				return sqlhlp.NullInt64{Valid: false}, nil
+			}
+			return sqlhlp.NullInt64{Valid: true, Int64: int64(*(*C.long)(data))}, nil
+		case *sqlhlp.NullInt64:
+			if isNull {
+				x.Valid = false
+			} else {
+				x.Valid = true
+				x.Int64 = int64(*(*C.long)(data))
+			}
+
+		case sqlhlp.NullFloat64:
+			if isNull {
+				return sqlhlp.NullFloat64{Valid: false}, nil
+			}
+			return sqlhlp.NullFloat64{Valid: true, Float64: float64(int64(*(*C.long)(data)))}, nil
+		case *sqlhlp.NullFloat64:
+			if isNull {
+				x.Valid = false
+			} else {
+				x.Valid = true
+				x.Float64 = float64(int64(*(*C.long)(data)))
+			}
+
 		default:
 			return dst, fmt.Errorf("int is needed, not %T", dst)
 		}

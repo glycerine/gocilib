@@ -16,6 +16,10 @@ limitations under the License.
 
 package gocilib
 
+import (
+	"encoding/json"
+)
+
 type StringVar struct {
 	data []byte
 }
@@ -63,4 +67,17 @@ func (s StringVar) Cap() int {
 
 func (s StringVar) MarshalText() (text []byte, err error) {
 	return s.data[:len(s.data):len(s.data)], nil
+}
+
+func (s StringVar) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(s.data[:len(s.data):len(s.data)]))
+}
+
+func (s *StringVar) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	s.Set(str)
+	return nil
 }
