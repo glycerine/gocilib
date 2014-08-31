@@ -305,30 +305,26 @@ func durationAsDays(d time.Duration) (days, hours, minutes, seconds, millisecond
 
 func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error) {
 	typ, sub := C.OCI_BindGetType(bnd), C.uint(0)
-	var data unsafe.Pointer
+	data := C.OCI_BindGetData(bnd)
 	switch typ {
 	case C.OCI_CDT_NUMERIC:
 		fallthrough
 	case C.OCI_CDT_LOB:
 		fallthrough
 	case C.OCI_CDT_FILE:
-		sub = C.OCI_BindGetSubtype(bnd)
-
+		fallthrough
 	case C.OCI_CDT_TIMESTAMP:
 		fallthrough
 	case C.OCI_CDT_LONG:
 		fallthrough
 	case C.OCI_CDT_INTERVAL:
 		sub = C.OCI_BindGetSubtype(bnd)
-		data = C.OCI_BindGetData(bnd)
-
-	case C.OCI_CDT_TEXT:
-		data = C.OCI_BindGetData(bnd)
 	}
 
+	isNull := data == nil || C.OCI_BindIsNull(bnd) == C.TRUE
 	Log.Debug("getBindInto", "bind", bnd,
 		"bind", log15.Lazy{func() string { return fmt.Sprintf("%T", dst) }},
-		"typ", typ, "sub", sub,
+		"typ", typ, "sub", sub, "isNull?", isNull,
 		"dst", log15.Lazy{func() string { return fmt.Sprintf("%#v", dst) }},
 	)
 
@@ -338,103 +334,119 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			"error", err)
 	}()
 
-	isNull := data == nil || C.OCI_BindIsNull(bnd) == C.TRUE
-
 	switch typ {
 	case C.OCI_CDT_NUMERIC:
-		if sub == C.OCI_NUM_FLOAT || sub == C.OCI_NUM_DOUBLE {
-			var f float64
-			if data != nil && !isNull {
-				if sub == C.OCI_NUM_DOUBLE {
-					f = float64(*(*C.double)(data))
-				} else {
-					f = float64(float32(*(*C.float)(data)))
-				}
-			}
-			switch x := dst.(type) {
-			case float32:
-				return float32(f), nil
-			case *float32:
-				*x = float32(f)
-			case float64:
-				return f, nil
-			case *float64:
-				*x = f
-
-			case sqlhlp.NullFloat64:
-				if isNull {
-					return sqlhlp.NullFloat64{Valid: false}, nil
-				}
-				return sqlhlp.NullFloat64{Valid: true, Float64: f}, nil
-			case *sqlhlp.NullFloat64:
-				if isNull {
-					x.Valid = false
-				} else {
-					x.Valid = true
-					x.Float64 = f
-				}
-			default:
-				return dst, fmt.Errorf("float is needed, not %T", dst)
+		var (
+			i int64
+			u uint64
+			f float64
+		)
+		if !isNull {
+			switch sub {
+			case C.OCI_NUM_SHORT:
+				i = int64(int16(*(*C.short)(data)))
+				u = uint64(i)
+				f = float64(i)
+			case C.OCI_NUM_INT:
+				i = int64(int32(*(*C.int)(data)))
+				u = uint64(i)
+				f = float64(i)
+			case C.OCI_NUM_BIGINT:
+				i = int64(*(*C.long)(data))
+				u = uint64(i)
+				f = float64(i)
+			case C.OCI_NUM_USHORT:
+				u = uint64(*(*C.ushort)(data))
+				i = int64(u)
+				f = float64(u)
+			case C.OCI_NUM_UINT:
+				u = uint64(*(*C.uint)(data))
+				i = int64(u)
+				f = float64(u)
+			case C.OCI_NUM_BIGUINT:
+				u = uint64(*(*C.ulong)(data))
+				i = int64(u)
+				f = float64(u)
+			case C.OCI_NUM_FLOAT:
+				f = float64(*(*C.float)(data))
+				i = int64(f)
+				u = uint64(f)
+			case C.OCI_NUM_DOUBLE:
+				f = float64(*(*C.double)(data))
+				i = int64(f)
+				u = uint64(f)
 			}
 		}
+
+		Log.Debug("data", "int", i, "uint", u, "float", f)
+
 		switch x := dst.(type) {
 		case int16:
-			return int16(*(*C.short)(data)), nil
+			return int16(i), nil
 		case *int16:
-			*x = int16(*(*C.short)(data))
+			*x = int16(i)
 		case uint16:
-			return uint16(*(*C.ushort)(data)), nil
+			return uint16(i), nil
 		case *uint16:
-			*x = uint16(*(*C.ushort)(data))
+			*x = uint16(i)
 		case int32:
-			return int32(*(*C.int)(data)), nil
+			return int32(i), nil
 		case *int32:
-			*x = int32(*(*C.int)(data))
+			*x = int32(i)
 		case int:
-			return int(*(*C.int)(data)), nil
+			return int(i), nil
 		case *int:
-			*x = int(*(*C.int)(data))
+			*x = int(i)
 		case uint32:
-			return uint32(*(*C.uint)(data)), nil
+			return uint32(i), nil
 		case *uint32:
-			*x = uint32(*(*C.uint)(data))
+			*x = uint32(i)
 		case uint:
-			return uint(*(*C.uint)(data)), nil
+			return uint(i), nil
 		case *uint:
-			*x = uint(*(*C.uint)(data))
+			*x = uint(i)
 		case int64:
-			return int64(*(*C.long)(data)), nil
+			return i, nil
 		case *int64:
-			*x = int64(*(*C.long)(data))
+			*x = i
 		case uint64:
-			return uint64(*(*C.ulong)(data)), nil
+			return uint64(i), nil
 		case *uint64:
-			*x = uint64(*(*C.ulong)(data))
+			*x = uint64(i)
 
 		case sqlhlp.NullInt64:
 			if C.OCI_BindIsNull(bnd) == C.TRUE {
 				return sqlhlp.NullInt64{Valid: false}, nil
 			}
-			return sqlhlp.NullInt64{Valid: true, Int64: int64(*(*C.long)(data))}, nil
+			return sqlhlp.NullInt64{Valid: true, Int64: i}, nil
 		case *sqlhlp.NullInt64:
 			if isNull {
 				x.Valid = false
 			} else {
 				x.Valid = true
-				x.Int64 = int64(*(*C.long)(data))
+				x.Int64 = i
 			}
+
+		case float32:
+			return float32(f), nil
+		case *float32:
+			*x = float32(f)
+		case float64:
+			return f, nil
+		case *float64:
+			*x = f
 
 		case sqlhlp.NullFloat64:
 			if isNull {
 				return sqlhlp.NullFloat64{Valid: false}, nil
 			}
-			return sqlhlp.NullFloat64{Valid: true, Float64: float64(int64(*(*C.long)(data)))}, nil
+			return sqlhlp.NullFloat64{Valid: true, Float64: f}, nil
 		case *sqlhlp.NullFloat64:
 			if isNull {
 				x.Valid = false
 			} else {
 				x.Valid = true
-				x.Float64 = float64(int64(*(*C.long)(data)))
+				x.Float64 = f
 			}
 
 		default:
@@ -444,13 +456,22 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 
 	case C.OCI_CDT_DATETIME:
 		var y, m, d, H, M, S C.int
-		if C.OCI_DateGetDateTime((*C.OCI_Date)(data), &y, &m, &d, &H, &M, &S) != C.TRUE {
-			return dst, fmt.Errorf("error reading date: %v", getLastErr())
+		if !isNull {
+			if C.OCI_DateGetDateTime((*C.OCI_Date)(data), &y, &m, &d, &H, &M, &S) != C.TRUE {
+				return dst, fmt.Errorf("error reading date: %v", getLastErr())
+			}
 		}
 		switch x := dst.(type) {
 		case time.Time:
+			if isNull {
+				return time.Time{}, nil
+			}
 			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local), nil
 		case *time.Time:
+			if isNull {
+				*x = time.Time{}
+				return x, nil
+			}
 			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
 			return x, nil
 		default:
@@ -459,17 +480,27 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 
 	case C.OCI_CDT_TIMESTAMP:
 		var y, m, d, H, M, S, f, offH, offM C.int
-		if C.OCI_TimestampGetDateTime((*C.OCI_Timestamp)(data), &y, &m, &d, &H, &M, &S, &f) != C.TRUE {
-			return dst, fmt.Errorf("error reading timestamp: %v", getLastErr())
+		var tz *time.Location
+		if !isNull {
+			if C.OCI_TimestampGetDateTime((*C.OCI_Timestamp)(data), &y, &m, &d, &H, &M, &S, &f) != C.TRUE {
+				return dst, fmt.Errorf("error reading timestamp: %v", getLastErr())
+			}
+			if C.OCI_TimestampGetTimeZoneOffset((*C.OCI_Timestamp)(data), &offH, &offM) != C.TRUE {
+				return dst, fmt.Errorf("error reading tz offset: %v", getLastErr())
+			}
+			tz = time.FixedZone(fmt.Sprintf("%+02d:%02d", offH, offM), int(offH*3600+offM*60))
 		}
-		if C.OCI_TimestampGetTimeZoneOffset((*C.OCI_Timestamp)(data), &offH, &offM) != C.TRUE {
-			return dst, fmt.Errorf("error reading tz offset: %v", getLastErr())
-		}
-		tz := time.FixedZone(fmt.Sprintf("%+02d:%02d", offH, offM), int(offH*3600+offM*60))
 		switch x := dst.(type) {
 		case time.Time:
+			if isNull {
+				return time.Time{}, nil
+			}
 			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz), nil
 		case *time.Time:
+			if isNull {
+				*x = time.Time{}
+				return x, nil
+			}
 			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz)
 			return x, nil
 		default:
@@ -489,7 +520,7 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			return StringVar{data: byteString(data)}, nil
 		case *StringVar:
 			x.data = byteString(data)
-			return x, nil
+			return dst, nil
 		default:
 			return dst, fmt.Errorf("text needs string, not %T!", dst)
 		}
@@ -504,7 +535,7 @@ func byteString(data unsafe.Pointer) []byte {
 	b := (*[32767]byte)(data)[0:32767:32767]
 	for i, c := range b {
 		if c == 0 {
-			b = b[:i]
+			b = b[:i+1]
 			break
 		}
 	}
