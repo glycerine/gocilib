@@ -17,8 +17,10 @@ limitations under the License.
 package sqlhlp
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	"time"
 )
 
 type NullBool sql.NullBool
@@ -66,7 +68,7 @@ type NullFloat64 sql.NullFloat64
 
 func (f NullFloat64) MarshalJSON() ([]byte, error) {
 	if !f.Valid {
-		return []byte{'0'}, nil
+		return []byte("null"), nil
 	}
 	return json.Marshal(f.Float64)
 }
@@ -81,4 +83,25 @@ func (f *NullFloat64) UnmarshalJSON(data []byte) error {
 	}
 	f.Valid = true
 	return nil
+}
+
+type NullTime struct {
+	Valid bool
+	time.Time
+}
+
+func (t NullTime) MarshalJSON() ([]byte, error) {
+	if !t.Valid {
+		return []byte("null"), nil
+	}
+	return t.Time.MarshalJSON()
+}
+
+func (t *NullTime) UnmarshalJSON(data []byte) error {
+	t.Valid = false
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	t.Valid = true
+	return t.Time.UnmarshalJSON(data)
 }

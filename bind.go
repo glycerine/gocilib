@@ -124,9 +124,9 @@ Outer:
 	case *string:
 		ok = C.OCI_BindString(h, nm, C.CString(*x), C.uint(len(*x)))
 	case StringVar:
-		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(cap(x.data)))
 	case *StringVar:
-		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(len(x.data)))
+		ok = C.OCI_BindString(h, nm, (*C.dtext)(unsafe.Pointer(&x.data[0])), C.uint(cap(x.data)))
 	case []string:
 		m := 0
 		for _, s := range x {
@@ -185,6 +185,18 @@ Outer:
 			break
 		}
 		ok = C.OCI_BindDate(h, nm, od)
+	case sqlhlp.NullTime:
+		od := C.OCI_DateCreate(C.OCI_StatementGetConnection(stmt.handle))
+		y, m, d := x.Date()
+		H, M, S := x.Clock()
+		if C.OCI_DateSetDateTime(od, C.int(y), C.int(m), C.int(d), C.int(H), C.int(M), C.int(S)) != C.TRUE {
+			break
+		}
+		ok = C.OCI_BindDate(h, nm, od)
+		if ok == C.TRUE && x.IsZero() {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+
 	case []time.Time:
 		od := C.OCI_DateArrayCreate(C.OCI_StatementGetConnection(stmt.handle), C.uint(len(x)))
 		sof_OCI_DateP := C.int(C.sof_OCI_DateP)
@@ -474,6 +486,22 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			}
 			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
 			return x, nil
+		case sqlhlp.NullTime:
+			if isNull {
+				return sqlhlp.NullTime{Valid: false}, nil
+			}
+			return sqlhlp.NullTime{
+				Valid: true,
+				Time:  time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local),
+			}, nil
+		case *sqlhlp.NullTime:
+			x.Valid = false
+			if isNull {
+				return x, nil
+			}
+			x.Valid = true
+			x.Time = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), 0, time.Local)
+			return x, nil
 		default:
 			return dst, fmt.Errorf("time needs time.Time, not %T!", dst)
 		}
@@ -496,6 +524,14 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 				return time.Time{}, nil
 			}
 			return time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz), nil
+		case sqlhlp.NullTime:
+			if isNull {
+				return sqlhlp.NullTime{Valid: false}, nil
+			}
+			return sqlhlp.NullTime{
+				Valid: true,
+				Time:  time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz),
+			}, nil
 		case *time.Time:
 			if isNull {
 				*x = time.Time{}
@@ -503,8 +539,17 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			}
 			*x = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz)
 			return x, nil
+		case *sqlhlp.NullTime:
+			x.Valid = false
+			if isNull {
+				return x, nil
+			}
+			x.Valid = true
+			x.Time = time.Date(int(y), time.Month(m), int(d), int(H), int(M), int(S), int(f), tz)
+			return x, nil
+
 		default:
-			return dst, fmt.Errorf("time needs time.Time, not %T!", dst)
+			return dst, fmt.Errorf("time needs time.Time or sqlhlp.NullTime, not %T!", dst)
 		}
 
 	case C.OCI_CDT_TEXT:
