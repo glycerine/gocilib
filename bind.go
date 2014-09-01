@@ -55,6 +55,8 @@ func (stmt *Statement) BindName(name string, value driver.Value) error {
 			switch x := value.(type) {
 			case []byte:
 				return len(x)
+			case []sqlhlp.NullFloat64:
+				return len(x)
 			case string:
 				return len(x)
 			}
@@ -66,6 +68,8 @@ func (stmt *Statement) BindName(name string, value driver.Value) error {
 		"cap", log15.Lazy{func() int {
 			switch x := value.(type) {
 			case []byte:
+				return cap(x)
+			case []sqlhlp.NullFloat64:
 				return cap(x)
 			case string:
 				return len(x)
@@ -191,6 +195,25 @@ Outer:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
 		if ok == C.TRUE && !x.Valid {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+	case []sqlhlp.NullFloat64:
+		arr := make([]float64, len(x), cap(x))
+		for i, f := range x {
+			if f.Valid {
+				arr[i] = f.Float64
+			}
+		}
+		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&arr[0]), C.uint(cap(arr)))
+		if ok == C.TRUE {
+			bnd := C.OCI_GetBind2(h, nm)
+			for i := 0; i < cap(arr); i++ {
+				if i < len(x) && x[i].Valid {
+					continue
+				}
+				if ok = C.OCI_BindSetNullAtPos(bnd, C.uint(i+1)); ok != C.TRUE {
+					break
+				}
+			}
 		}
 
 	case time.Time:
