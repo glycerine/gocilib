@@ -55,6 +55,8 @@ func (stmt *Statement) BindName(name string, value driver.Value) error {
 			switch x := value.(type) {
 			case []byte:
 				return len(x)
+			case []int:
+				return len(x)
 			case []sqlhlp.NullFloat64:
 				return len(x)
 			case string:
@@ -68,6 +70,8 @@ func (stmt *Statement) BindName(name string, value driver.Value) error {
 		"cap", log15.Lazy{func() int {
 			switch x := value.(type) {
 			case []byte:
+				return cap(x)
+			case []int:
 				return cap(x)
 			case []sqlhlp.NullFloat64:
 				return cap(x)
@@ -337,6 +341,13 @@ Outer:
 	if ok != C.TRUE {
 		return fmt.Errorf("BindName(%s): %v", name, getLastErr())
 	}
+
+	if reflect.ValueOf(value).Kind() != reflect.Ptr {
+		ok = C.OCI_BindSetDirection(C.OCI_GetBind2(h, nm), C.OCI_BDM_IN)
+	}
+	if ok != C.TRUE {
+		return fmt.Errorf("BindName(%s): %v", name, getLastErr())
+	}
 	return nil
 }
 
@@ -501,7 +512,7 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			}
 
 		default:
-			return dst, fmt.Errorf("int is needed, not %T", dst)
+			return dst, fmt.Errorf("bindInto: int is needed, not %T", dst)
 		}
 		return dst, nil
 

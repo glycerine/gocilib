@@ -24,6 +24,7 @@ import "C"
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 )
 
 const defaultPrefetchMemory = 1 << 20 // 1Mb
@@ -135,12 +136,18 @@ func (stmt *Statement) BindExecute(
 	//	return getLastErr()
 	//}
 	if len(arrayArgs) > 0 {
+		if C.OCI_SetBindMode(stmt.handle, C.OCI_BIND_BY_POS) != C.TRUE {
+			return getLastErr()
+		}
 		for i, a := range arrayArgs {
 			if err := stmt.BindPos(i+1, a); err != nil {
 				return err
 			}
 		}
 	} else if len(mapArgs) > 0 {
+		if C.OCI_SetBindMode(stmt.handle, C.OCI_BIND_BY_NAME) != C.TRUE {
+			return getLastErr()
+		}
 		for k, a := range mapArgs {
 			if err := stmt.BindName(k, a); err != nil {
 				return err
@@ -154,10 +161,11 @@ func (stmt *Statement) BindExecute(
 	if len(arrayArgs) > 0 {
 		for i, value := range arrayArgs {
 			bnd := C.OCI_GetBind(stmt.handle, C.uint(i+1))
-			if C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
+			if bnd == nil || C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
 				continue
 			}
 			var err error
+			Log.Debug("arrayArgs", "i", i, "bnd", fmt.Sprintf("%#v", bnd))
 			if arrayArgs[i], err = getBindInto(value, bnd); err != nil {
 				return err
 			}
