@@ -18,14 +18,18 @@ package gocilib
 
 import (
 	"database/sql/driver"
+	"strings"
 	"testing"
 
 	"github.com/tgulacsi/gocilib/sqlhlp"
 	"gopkg.in/inconshreveable/log15.v2"
 )
 
-func TestInBindStringArray(t *testing.T) {
+func init() {
 	Log.SetHandler(log15.StderrHandler)
+}
+
+func TestInBindIntArray(t *testing.T) {
 	conn := getConnection(t)
 	st, err := conn.NewStatement()
 	if err != nil {
@@ -36,8 +40,8 @@ func TestInBindStringArray(t *testing.T) {
 
 	ret := NewStringVar("", 10)
 	if err := st.BindExecute(`DECLARE
-  TYPE num_tab_typ IS TABLE OF VARCHAR2(100) INDEX BY BINARY_INTEGER;
-  tab num_tab_typ := :1;
+  TYPE str_tab_typ IS TABLE OF VARCHAR2(100) INDEX BY BINARY_INTEGER;
+  tab str_tab_typ := :1;
 BEGIN
   :2 := ''||tab.COUNT;
 END;`,
@@ -49,7 +53,36 @@ END;`,
 		t.Errorf("awaited 2, got %q", ret.String())
 	}
 }
-func TestInBindNumArray(t *testing.T) {
+func TestInBindFloat(t *testing.T) {
+	conn := getConnection(t)
+	st, err := conn.NewStatement()
+	if err != nil {
+		t.Errorf("new statement: %v", err)
+		return
+	}
+	defer st.Close()
+
+	for i, inp := range []driver.Value{
+		sqlhlp.NullFloat64{Valid: true, Float64: 3.14},
+		float32(3.14),
+		float64(3.14),
+	} {
+		ret := NewStringVar("", 1000)
+		if err := st.BindExecute(`DECLARE
+	num NUMBER := :1;
+BEGIN
+  :2 := TO_CHAR(num);
+END;`,
+			[]driver.Value{inp, ret}, nil,
+		); err != nil {
+			t.Errorf("%d. err: %v", i, err)
+		}
+		if !strings.HasPrefix(ret.String(), "3.140") {
+			t.Errorf("%d. awaited 2, got %q", i, ret.String())
+		}
+	}
+}
+func TestInBindFloatArray(t *testing.T) {
 	Log.SetHandler(log15.StderrHandler)
 	conn := getConnection(t)
 	st, err := conn.NewStatement()
@@ -64,11 +97,11 @@ func TestInBindNumArray(t *testing.T) {
 		[]int16{1, 2, 3},
 		[]int32{1, 2, 3},
 		[]int64{1, 2, 3},
-		//[]float32{1, 2, 3},
+		[]float32{1, 2, 3},
 		[]float64{1, 2, 3},
 		[]sqlhlp.NullFloat64{{Valid: true, Float64: 1}, {Valid: true, Float64: 2}, {Valid: true, Float64: 3}},
 	} {
-	ret := NewStringVar("", 1000)
+		ret := NewStringVar("", 1000)
 		if err := st.BindExecute(`DECLARE
   TYPE num_tab_typ IS TABLE OF NUMBER INDEX BY BINARY_INTEGER;
   tab num_tab_typ := :1;
@@ -84,7 +117,7 @@ BEGIN
 END;`,
 			[]driver.Value{inp, ret}, nil,
 		); err != nil {
-			t.Errorf("%d.err: %v", i, err)
+			t.Errorf("%d. err: %v", i, err)
 			continue
 		}
 		if ret.String() != await {

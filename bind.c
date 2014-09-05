@@ -36,8 +36,6 @@ boolean OCI_API OCI_BindNumber
     OCINumber     *data
 )
 {
-    //OCI_CHECK_BIND_CALL2(stmt, name, data, OCI_IPC_BIGINT);
-
     return OCI_BindData(stmt, data, sizeof(OCINumber), name, OCI_CDT_NUMERIC,
         SQLT_VNU, OCI_BIND_INPUT, OCI_NUM_NUMBER, NULL, 0);
 }
@@ -50,8 +48,6 @@ boolean OCI_API OCI_BindArrayOfNumbers
     unsigned int  nbelem
 )
 {
-    //OCI_CHECK_BIND_CALL2(stmt, name, data, OCI_IPC_BIGINT);
-
     return OCI_BindData(stmt, data, sizeof(OCINumber), name, OCI_CDT_NUMERIC,
         SQLT_VNU, OCI_BIND_INPUT, OCI_NUM_NUMBER, NULL, nbelem);
 }
@@ -67,16 +63,22 @@ boolean OCI_API NumberFromDouble
     sword status;
     double check;
 
-    //OCI_CALL2
-    //(
-      //  res, con,
+    status = OCINumberFromReal(err, &src, sizeof(double), dst);
+    return status == 0;
+}
 
-    printf("\n\nnum=%.03f\n\n", src);
-    status = OCINumberFromReal(err, &src, sizeof(double), dst)
-    ;//)
-    if(status == 0) {
-        OCINumberToReal(err, dst, sizeof(double), &check);
-        printf("\n check: %.03f\n", check);
-    }
+boolean OCI_API NumberToText
+(
+    OCIError  *err,
+	char      *dst,
+	ub4       *dst_size,
+    OCINumber *src
+)
+{
+    boolean res;
+    sword status;
+    double check;
+
+    status = OCINumberToText(err, src, "TM9", 3, NULL, 0, dst_size, dst);
     return status == 0;
 }

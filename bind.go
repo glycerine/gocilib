@@ -27,6 +27,8 @@ const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
 extern boolean OCI_BindNumber(OCI_Statement *stmt, const mtext *name, OCINumber *data);
 extern boolean OCI_BindArrayOfNumbers(OCI_Statement *stmt, const mtext *name, OCINumber *data, unsigned int nbelem);
 extern boolean NumberFromDouble(OCIError *err, OCINumber *dst, double src);
+//extern boolean NumberFromDouble(OCI_Connection *con, OCINumber *dst, double src);
+extern boolean NumberToText(OCIError *err, char *dst, ub4 *dst_size, OCINumber *src);
 */
 import "C"
 
@@ -156,8 +158,8 @@ Outer:
 	case []string:
 		m := 0
 		for _, s := range x {
-			if len(s) > m {
-				m = len(s)
+			if len(s)+1 > m {
+				m = len(s) + 1
 			}
 		}
 		if m == 0 {
@@ -184,26 +186,17 @@ Outer:
 		for i, b := range x {
 			copy(y[i*m:(i+1)*m], b)
 		}
-		ok = C.OCI_BindArrayOfRaws(h, nm, unsafe.Pointer(&y[0]), C.uint(m), C.uint(len(x)))
-	case float64:
-		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x))
-		/*
-		var num C.OCINumber
-		ok = C.NumberFromDouble(
-			(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle))),
-			&num, C.double(x))
-		if ok == C.TRUE {
-			ok = C.OCI_BindNumber(h, nm, &num)
-		}
-		*/
-	case *float64:
-		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
-	case []float64:
-		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
+		ok = C.OCI_BindArrayOfRaws(h, nm, unsafe.Pointer(&y[0]), C.uint(m), C.uint(cap(x)))
+	case float32:
+		ok = C.OCI_BindFloat(h, nm, (*C.float)(&x))
+	case *float32:
+		ok = C.OCI_BindFloat(h, nm, (*C.float)(x))
+	case []float32:
+		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.float)(&x[0]), C.uint(cap(x)))
 		errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
 		num := make([]C.OCINumber, len(x), cap(x))
-		for i, d := range x {
-			ok = C.NumberFromDouble(errHandle, &num[i], C.double(d))
+		for i, f := range x {
+			ok = C.NumberFromDouble(errHandle, &num[i], C.double(float64(f)))
 			if ok != C.TRUE {
 				break
 			}
@@ -211,15 +204,36 @@ Outer:
 		if ok == C.TRUE {
 			ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
 		}
+	case float64:
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x))
+	case *float64:
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
+	case []float64:
+		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(cap(x)))
+		/*
+			errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
+			num := make([]C.OCINumber, len(x), cap(x))
+			for i, d := range x {
+				ok = C.NumberFromDouble(errHandle, &num[i], C.double(d))
+				if ok != C.TRUE {
+					break
+				}
+			}
+			if ok == C.TRUE {
+				ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
+			}
+		*/
 	case sqlhlp.NullFloat64:
-		//ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
-		var num C.OCINumber
-		ok = C.NumberFromDouble(
-			(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle))),
-			&num, C.double(x.Float64))
-		if ok == C.TRUE {
-			ok = C.OCI_BindNumber(h, nm, &num)
-		}
+		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
+		/*
+			var num C.OCINumber
+			ok = C.NumberFromDouble(
+				(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle))),
+				&num, C.double(x.Float64))
+			if ok == C.TRUE {
+				ok = C.OCI_BindNumber(h, nm, &num)
+			}
+		*/
 		if ok == C.TRUE && !x.Valid {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}
@@ -239,6 +253,15 @@ Outer:
 			if ok != C.TRUE {
 				break
 			}
+
+			txt := make([]byte, 64)
+			buflen := C.ub4(len(txt))
+			ok = C.NumberToText(errHandle, (*C.char)(unsafe.Pointer(&txt[0])), &buflen, &arr[i])
+			if ok != C.TRUE {
+				break
+			}
+			txt = txt[:int(buflen)]
+			Log.Info("[]sqlhlp.NullFloat64", "num", d.Float64, "txt", string(txt))
 		}
 		if ok == C.TRUE {
 			ok = C.OCI_BindArrayOfNumbers(h, nm, &arr[0], C.uint(cap(arr)))
