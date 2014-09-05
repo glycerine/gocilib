@@ -16,11 +16,18 @@ limitations under the License.
 
 package gocilib
 
-// #cgo LDFLAGS: -locilib
-// #include "ocilib.h"
-//
-// const int sof_OCI_DateP = sizeof(OCI_Date*);
-// const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
+/*
+#cgo LDFLAGS: -locilib -lclntsh
+#include <ocilib.h>
+#include <oci.h>
+
+const int sof_OCI_DateP = sizeof(OCI_Date*);
+const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
+
+extern boolean OCI_BindNumber(OCI_Statement *stmt, const mtext *name, OCINumber *data);
+extern boolean OCI_BindArrayOfNumbers(OCI_Statement *stmt, const mtext *name, OCINumber *data, unsigned int nbelem);
+extern boolean NumberFromDouble(OCIError *err, OCINumber *dst, double src);
+*/
 import "C"
 
 import (
@@ -98,15 +105,15 @@ Outer:
 		ok = C.OCI_BindUnsignedShort(h, nm, (*C.ushort)(unsafe.Pointer(x)))
 	case []uint16:
 		ok = C.OCI_BindArrayOfUnsignedShorts(h, nm, (*C.ushort)(unsafe.Pointer(&x[0])), C.uint(len(x)))
-	case int: // int
+	case int32: // int
 		ok = C.OCI_BindInt(h, nm, (*C.int)(unsafe.Pointer(&x)))
-	case []int:
+	case []int32:
 		ok = C.OCI_BindArrayOfInts(h, nm, (*C.int)(unsafe.Pointer(&x[0])), C.uint(len(x)))
-	case uint: // int
+	case uint32: // int
 		ok = C.OCI_BindUnsignedInt(h, nm, (*C.uint)(unsafe.Pointer(&x)))
-	case *uint: // int
+	case *uint32: // int
 		ok = C.OCI_BindUnsignedInt(h, nm, (*C.uint)(unsafe.Pointer(x)))
-	case []uint:
+	case []uint32:
 		ok = C.OCI_BindArrayOfUnsignedInts(h, nm, (*C.uint)(unsafe.Pointer(&x[0])), C.uint(len(x)))
 	case int64:
 		ok = C.OCI_BindBigInt(h, nm, (*C.big_int)(unsafe.Pointer(&x)))
@@ -178,20 +185,41 @@ Outer:
 			copy(y[i*m:(i+1)*m], b)
 		}
 		ok = C.OCI_BindArrayOfRaws(h, nm, unsafe.Pointer(&y[0]), C.uint(m), C.uint(len(x)))
-	case float32:
-		ok = C.OCI_BindFloat(h, nm, (*C.float)(&x))
-	case *float32:
-		ok = C.OCI_BindFloat(h, nm, (*C.float)(x))
-	case []float32:
-		ok = C.OCI_BindArrayOfFloats(h, nm, (*C.float)(&x[0]), C.uint(len(x)))
 	case float64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x))
+		/*
+		var num C.OCINumber
+		ok = C.NumberFromDouble(
+			(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle))),
+			&num, C.double(x))
+		if ok == C.TRUE {
+			ok = C.OCI_BindNumber(h, nm, &num)
+		}
+		*/
 	case *float64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
 	case []float64:
-		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
+		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(len(x)))
+		errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
+		num := make([]C.OCINumber, len(x), cap(x))
+		for i, d := range x {
+			ok = C.NumberFromDouble(errHandle, &num[i], C.double(d))
+			if ok != C.TRUE {
+				break
+			}
+		}
+		if ok == C.TRUE {
+			ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
+		}
 	case sqlhlp.NullFloat64:
-		ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
+		//ok = C.OCI_BindDouble(h, nm, (*C.double)(&x.Float64))
+		var num C.OCINumber
+		ok = C.NumberFromDouble(
+			(*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle))),
+			&num, C.double(x.Float64))
+		if ok == C.TRUE {
+			ok = C.OCI_BindNumber(h, nm, &num)
+		}
 		if ok == C.TRUE && !x.Valid {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}
@@ -201,13 +229,20 @@ Outer:
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}
 	case []sqlhlp.NullFloat64:
-		arr := make([]float64, len(x), cap(x))
-		for i, f := range x {
-			if f.Valid {
-				arr[i] = f.Float64
+		errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
+		arr := make([]C.OCINumber, len(x), cap(x))
+		for i, d := range x {
+			if !d.Valid {
+				continue
+			}
+			ok = C.NumberFromDouble(errHandle, &arr[i], C.double(d.Float64))
+			if ok != C.TRUE {
+				break
 			}
 		}
-		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&arr[0]), C.uint(cap(arr)))
+		if ok == C.TRUE {
+			ok = C.OCI_BindArrayOfNumbers(h, nm, &arr[0], C.uint(cap(arr)))
+		}
 		if ok == C.TRUE {
 			bnd := C.OCI_GetBind2(h, nm)
 			for i := 0; i < cap(arr); i++ {

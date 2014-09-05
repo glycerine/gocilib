@@ -18,8 +18,8 @@ package gocilib
 
 /*
 #cgo LDFLAGS: -locilib -lclntsh
-#include "ocilib.h"
-#include "oci.h"
+#include <ocilib.h>
+#include <oci.h>
 
 extern OCI_Subscription *libSubsRegister(OCI_Connection *conn, const char *name, unsigned int evt, unsigned int port, unsigned int timeout, boolean rowids_needed);
 
