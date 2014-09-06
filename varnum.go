@@ -68,12 +68,10 @@ func (n OCINumber) String() string {
 	first := n[1]
 	positive := first&0x80 > 0
 	exp := first & 0x7f
-	Log.Debug("first", "n", n[:2], "length", length, "first", first, "positive", positive, "exp", exp)
 	i := 0
 	if positive {
 		exp = exp + 128 + 64
 		for j := byte(0); j < exp; j++ {
-			Log.Debug("pos", "exp", exp, "length", length, "j", j)
 			if j == length-1 && n[j+2] == 0 {
 				break
 			}
@@ -88,8 +86,10 @@ func (n OCINumber) String() string {
 		if exp < length-1 {
 			txt[i] = '.'
 			i++
+			if int(length)+2 > len(n) {
+				length = byte(len(n) - 2)
+			}
 			for j := exp; j < length; j++ {
-				Log.Debug("pos2", "exp", exp, "length", length, "j", j)
 				digit := n[j+2] - 1
 				txt[i] = '0' + digit/10
 				txt[i+1] = '0' + digit%10
@@ -101,7 +101,6 @@ func (n OCINumber) String() string {
 		txt[0] = '-'
 		i = 1
 		for j := byte(0); j < exp; j++ {
-			Log.Debug("neg", "exp", exp, "length", length, "j", j)
 			digit := 101 - n[j+2]
 			if j != 0 || digit > 10 {
 				txt[i] = '0' + digit/10
@@ -113,6 +112,9 @@ func (n OCINumber) String() string {
 		if exp < length-1 {
 			txt[i] = '.'
 			i++
+			if int(length)+2 > len(n) {
+				length = byte(len(n) - 2)
+			}
 			for j := exp; j < length; j++ {
 				digit := 101 - n[j+2]
 				txt[i] = '0' + digit/10
@@ -134,6 +136,7 @@ func (n *OCINumber) SetString(txt string) {
 		positive = false
 		txt = txt[1:]
 	}
+	txt = strings.TrimLeft(txt, "0")
 	dot := strings.IndexByte(txt, '.')
 	if dot >= 0 {
 		txt = txt[:dot] + txt[dot+1:]
@@ -141,22 +144,21 @@ func (n *OCINumber) SetString(txt string) {
 		dot = len(txt)
 	}
 	if len(txt)%2 == 1 {
-		txt = txt + "0"
+		txt = "0" + txt
 	}
-	j := 2
+	j := 1
 	if positive {
-		n[1] = byte(128 + (dot+1)/2 + 64)
+		n[j] = byte((dot+1)/2 + 128 + 64)
 		for i := 0; i < len(txt); i += 2 {
-			n[j] = (txt[i+1]-'0')*10 + txt[i] - '0' + 1
 			j++
+			n[j] = 1 + ((txt[i]-'0')*10 + txt[i+1] - '0')
 		}
 	} else {
-		n[1] = ^byte(dot + 128 + 64)
+		n[j] = ^byte((dot+1)/2 + 128 + 64)
 		for i := 0; i < len(txt); i += 2 {
-			n[j] = 101 - ((txt[i+1]-'0')*10 + txt[i] - '0')
 			j++
+			n[j] = 101 - ((txt[i]-'0')*10 + txt[i+1] - '0')
 		}
 	}
-	n[0] = byte(j - 1)
-	Log.Debug("set", "dot", dot, "positive?", positive, "n[:2]", n[:2])
+	n[0] = byte(j)
 }
