@@ -27,7 +27,6 @@ const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
 extern boolean OCI_BindNumber(OCI_Statement *stmt, const mtext *name, OCINumber *data);
 extern boolean OCI_BindArrayOfNumbers(OCI_Statement *stmt, const mtext *name, OCINumber *data, unsigned int nbelem);
 extern boolean NumberFromDouble(OCIError *err, OCINumber *dst, double src);
-//extern boolean NumberFromDouble(OCI_Connection *con, OCINumber *dst, double src);
 extern boolean NumberToText(OCIError *err, char *dst, ub4 *dst_size, OCINumber *src);
 */
 import "C"
@@ -201,6 +200,7 @@ Outer:
 				break
 			}
 		}
+		Log.Info("num2", "x", x, "arr", num)
 		if ok == C.TRUE {
 			ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
 		}

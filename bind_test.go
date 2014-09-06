@@ -97,9 +97,10 @@ func TestInBindFloatArray(t *testing.T) {
 		[]int16{1, 2, 3},
 		[]int32{1, 2, 3},
 		[]int64{1, 2, 3},
-		[]float32{1, 2, 3},
+		[]float32{1, 2, 3}, //3
 		[]float64{1, 2, 3},
 		[]sqlhlp.NullFloat64{{Valid: true, Float64: 1}, {Valid: true, Float64: 2}, {Valid: true, Float64: 3}},
+		[]sqlhlp.NullFloat64{{Valid: true, Float64: 1}},
 	} {
 		ret := NewStringVar("", 1000)
 		if err := st.BindExecute(`DECLARE
