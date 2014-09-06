@@ -18,6 +18,8 @@ package gocilib
 
 import (
 	"strings"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
 
 // http://docs.oracle.com/cd/B10500_01/appdev.920/a96584/oci03typ.htm#421773
@@ -55,33 +57,68 @@ func (n *OCINumber) SetBytes(data []byte) {
 }
 
 func (n OCINumber) String() string {
+	Log.SetHandler(log15.StderrHandler)
+
 	if n[0] == 0xff { // NULL
 		return ""
 	}
 	var txt [42]byte
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
-	length := int(n[0])
+	length := n[0]
 	first := n[1]
-	positive := first>>7 > 0
-	exp := first & ((1 << 8) - 1)
+	positive := first&0x80 > 0
+	exp := first & 0x7f
+	Log.Debug("first", "n", n[:2], "length", length, "first", first, "positive", positive, "exp", exp)
 	i := 0
 	if positive {
-		exp = exp + 128 + 65
-		for j := 0; j < length; j++ {
+		exp = exp + 128 + 64
+		for j := byte(0); j < exp; j++ {
+			Log.Debug("pos", "exp", exp, "length", length, "j", j)
+			if j == length-1 && n[j+2] == 0 {
+				break
+			}
 			digit := n[j+2] - 1
-			txt[i] = '0' + digit/10
-			txt[i+1] = '0' + digit%10
-			i += 2
+			if j != 0 || digit > 10 {
+				txt[i] = '0' + digit/10
+				i++
+			}
+			txt[i] = '0' + digit%10
+			i++
+		}
+		if exp < length-1 {
+			txt[i] = '.'
+			i++
+			for j := exp; j < length; j++ {
+				Log.Debug("pos2", "exp", exp, "length", length, "j", j)
+				digit := n[j+2] - 1
+				txt[i] = '0' + digit/10
+				txt[i+1] = '0' + digit%10
+				i += 2
+			}
 		}
 	} else {
-		exp = exp - 128 - 65
+		exp = ^exp - 128 - 64
 		txt[0] = '-'
 		i = 1
-		for j := 0; j < length; j++ {
+		for j := byte(0); j < exp; j++ {
+			Log.Debug("neg", "exp", exp, "length", length, "j", j)
 			digit := 101 - n[j+2]
-			txt[i] = '0' + digit/10
-			txt[i+1] = '0' + digit%10
-			i += 2
+			if j != 0 || digit > 10 {
+				txt[i] = '0' + digit/10
+				i++
+			}
+			txt[i] = '0' + digit%10
+			i++
+		}
+		if exp < length-1 {
+			txt[i] = '.'
+			i++
+			for j := exp; j < length; j++ {
+				digit := 101 - n[j+2]
+				txt[i] = '0' + digit/10
+				txt[i+1] = '0' + digit%10
+				i += 2
+			}
 		}
 	}
 	return string(txt[:i])
@@ -106,19 +143,20 @@ func (n *OCINumber) SetString(txt string) {
 	if len(txt)%2 == 1 {
 		txt = txt + "0"
 	}
+	j := 2
 	if positive {
 		n[1] = byte(128 + (dot+1)/2 + 64)
-		j := 2
 		for i := 0; i < len(txt); i += 2 {
-			n[j] = (txt[i]-'0')*10 + txt[i+1] - '0' - 1
+			n[j] = (txt[i+1]-'0')*10 + txt[i] - '0' + 1
 			j++
 		}
 	} else {
-		n[1] = byte(255 - (dot+1)/2 - 64)
-		j := 2
+		n[1] = ^byte(dot + 128 + 64)
 		for i := 0; i < len(txt); i += 2 {
-			n[j] = 101 - ((txt[i]-'0')*10 + txt[i+1] - '0')
+			n[j] = 101 - ((txt[i+1]-'0')*10 + txt[i] - '0')
 			j++
 		}
 	}
+	n[0] = byte(j - 1)
+	Log.Debug("set", "dot", dot, "positive?", positive, "n[:2]", n[:2])
 }

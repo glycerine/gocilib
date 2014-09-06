@@ -17,11 +17,11 @@ limitations under the License.
 package gocilib
 
 import (
+	"bytes"
 	"testing"
 )
 
 func TestOCINumber(t *testing.T) {
-	var n OCINumber
 	for i, elt := range []struct {
 		inp []byte
 		out string
@@ -29,22 +29,29 @@ func TestOCINumber(t *testing.T) {
 		{[]byte{2, 193, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "1"},
 		{[]byte{2, 193, 3, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "2"},
 		{[]byte{2, 193, 4, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "3"},
+		{[]byte{2, 193, 6, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "5"},
+		{[]byte{2, 0x3e, 96, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "-5"},
 	} {
+		var n OCINumber
 		n.SetBytes(elt.inp)
 		got := n.String()
-		t.Logf("%d. %q=%q", i, elt.inp, got)
+		t.Logf("%d. %v=%s", i, elt.inp, got)
 		if got != elt.out {
-			t.Errorf("%d. got %q, awaited %q.", i, got, elt.out)
+			t.Errorf("%d. got %v, awaited %v.", i, got, elt.out)
+		}
+		n.SetString(elt.out)
+		if !bytes.Equal(n[:], elt.inp) {
+			t.Errorf("%d. SetString mismatch: got %v, awaited %v.", i, n[:], elt.inp)
 		}
 	}
 }
 
 func TestOCINumberSet(t *testing.T) {
 	var n OCINumber
-	for i, s := range []string{"1", "2", "3"} {
+	for i, s := range []string{"1", "2", "3", "-5"} {
 		n.SetString(s)
 		got := n.String()
-		t.Logf("%d. %q=%q %#v", i, s, got, n)
+		t.Logf("%d. %q=%q %v", i, s, got, n[:])
 		if got != s {
 			t.Errorf("%d. got %q, awaited %q.", i, got, s)
 		}
