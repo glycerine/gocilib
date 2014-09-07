@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"gopkg.in/inconshreveable/log15.v2"
+	"speter.net/go/exp/math/dec/inf"
 )
 
 // http://docs.oracle.com/cd/B10500_01/appdev.920/a96584/oci03typ.htm#421773
@@ -50,7 +51,19 @@ to be accurate. The 19 data bytes, each representing a base-100 digit, yield a
 maximum precision of 38 digits for an Oracle NUMBER.
 */
 
-type OCINumber [22]byte
+/*
+orl.h
+
+#define OCI_NUMBER_SIZE 22
+struct OCINumber
+{
+  ub1 OCINumberPart[OCI_NUMBER_SIZE];
+};
+typedef struct OCINumber OCINumber;
+*/
+const OciNumberSize = 22
+
+type OCINumber [OciNumberSize]byte
 
 func (n *OCINumber) SetBytes(data []byte) {
 	copy(n[:], data)
@@ -161,4 +174,13 @@ func (n *OCINumber) SetString(txt string) {
 		}
 	}
 	n[0] = byte(j)
+}
+
+func (n *OCINumber) SetDec(dec *inf.Dec) {
+	n.SetString(dec.String())
+}
+
+// Dec sets the given inf.Dec to the value of OCINumber.
+func (n OCINumber) Dec(dec *inf.Dec) {
+	dec.SetString(n.String())
 }
