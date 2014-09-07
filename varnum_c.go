@@ -29,6 +29,12 @@ import (
 	"unsafe"
 )
 
+// SetCOCINumber sets this OCINumber to the same value as the given C.OCINumber.
 func (n *OCINumber) SetCOCINumber(m C.OCINumber) {
 	C.memcpy(unsafe.Pointer(&n[0]), unsafe.Pointer(&m), OciNumberSize)
+}
+
+// COCINumber returns a *C.OCINumber, backed by this OCINumber.
+func (n OCINumber) COCINumber() *C.OCINumber {
+	return (*C.OCINumber)(unsafe.Pointer(&n))
 }
