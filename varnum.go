@@ -17,6 +17,7 @@ limitations under the License.
 package gocilib
 
 import (
+	"strconv"
 	"strings"
 
 	"gopkg.in/inconshreveable/log15.v2"
@@ -64,10 +65,6 @@ typedef struct OCINumber OCINumber;
 const OciNumberSize = 22
 
 type OCINumber [OciNumberSize]byte
-
-func (n *OCINumber) SetBytes(data []byte) {
-	copy(n[:], data)
-}
 
 func (n OCINumber) String() string {
 	Log.SetHandler(log15.StderrHandler)
@@ -139,10 +136,15 @@ func (n OCINumber) String() string {
 	return string(txt[:i])
 }
 
-func (n *OCINumber) SetString(txt string) {
+func (n *OCINumber) SetBytes(data []byte) *OCINumber {
+	copy(n[:], data)
+	return n
+}
+
+func (n *OCINumber) SetString(txt string) *OCINumber {
 	if txt == "" {
 		n[0] = 0xff
-		return
+		return n
 	}
 	positive := true
 	if txt[0] == '-' { // negative
@@ -174,10 +176,15 @@ func (n *OCINumber) SetString(txt string) {
 		}
 	}
 	n[0] = byte(j)
+	return n
 }
 
-func (n *OCINumber) SetDec(dec *inf.Dec) {
-	n.SetString(dec.String())
+func (n *OCINumber) SetFloat(f float64) *OCINumber {
+	return n.SetString(strconv.FormatFloat(f, 'g', 38, 64))
+}
+
+func (n *OCINumber) SetDec(dec *inf.Dec) *OCINumber {
+	return n.SetString(dec.String())
 }
 
 // Dec sets the given inf.Dec to the value of OCINumber.

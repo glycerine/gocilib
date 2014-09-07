@@ -49,6 +49,18 @@ boolean OCI_API OCI_BindArrayOfNumbers
 )
 {
     return OCI_BindData(stmt, data, sizeof(OCINumber), name, OCI_CDT_NUMERIC,
+        SQLT_VNU, OCI_BIND_INPUT, 0, NULL, nbelem);
+}
+
+boolean OCI_API OCI_BindArrayOfNumbers2
+(
+    OCI_Statement *stmt,
+    const mtext   *name,
+    OCINumber     **data,
+    unsigned int  nbelem
+)
+{
+    return OCI_BindData(stmt, data, sizeof(OCINumber*), name, OCI_CDT_NUMERIC,
         SQLT_VNU, OCI_BIND_INPUT, OCI_NUM_NUMBER, NULL, nbelem);
 }
 

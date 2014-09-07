@@ -26,6 +26,7 @@ const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
 
 extern boolean OCI_BindNumber(OCI_Statement *stmt, const mtext *name, OCINumber *data);
 extern boolean OCI_BindArrayOfNumbers(OCI_Statement *stmt, const mtext *name, OCINumber *data, unsigned int nbelem);
+extern boolean OCI_BindArrayOfNumbers2(OCI_Statement *stmt, const mtext *name, OCINumber **data, unsigned int nbelem);
 extern boolean NumberFromDouble(OCIError *err, OCINumber *dst, double src);
 extern boolean NumberToText(OCIError *err, char *dst, ub4 *dst_size, OCINumber *src);
 */
@@ -191,14 +192,12 @@ Outer:
 	case *float32:
 		ok = C.OCI_BindFloat(h, nm, (*C.float)(x))
 	case []float32:
+		ok = C.TRUE
 		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.float)(&x[0]), C.uint(cap(x)))
-		errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
 		num := make([]C.OCINumber, len(x), cap(x))
 		for i, f := range x {
-			ok = C.NumberFromDouble(errHandle, &num[i], C.double(float64(f)))
-			if ok != C.TRUE {
-				break
-			}
+			var n OCINumber
+			num[i] = *n.SetFloat(float64(f)).COCINumber()
 		}
 		Log.Info("num2", "x", x, "arr", num)
 		if ok == C.TRUE {
@@ -209,7 +208,17 @@ Outer:
 	case *float64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
 	case []float64:
-		ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(cap(x)))
+		num := make([]C.OCINumber, len(x), cap(x))
+		for i, f := range x {
+			var n OCINumber
+			num[i] = *n.SetFloat(f).COCINumber()
+			//Log.Debug("setfloat", "f", f, "OCINumber", n.SetFloat(f).String())
+		}
+		Log.Info("num2", "x", x, "arr", num)
+		if ok == C.TRUE {
+			ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
+		}
+		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(cap(x)))
 		/*
 			errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
 			num := make([]C.OCINumber, len(x), cap(x))
@@ -243,28 +252,30 @@ Outer:
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}
 	case []sqlhlp.NullFloat64:
-		errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
-		arr := make([]C.OCINumber, len(x), cap(x))
+		//errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
+		ok = C.TRUE
+		arr := make([]*C.OCINumber, len(x), cap(x))
 		for i, d := range x {
 			if !d.Valid {
 				continue
 			}
-			ok = C.NumberFromDouble(errHandle, &arr[i], C.double(d.Float64))
-			if ok != C.TRUE {
-				break
-			}
+			var n OCINumber
+			arr[i] = n.SetFloat(d.Float64).COCINumber()
 
-			txt := make([]byte, 64)
-			buflen := C.ub4(len(txt))
-			ok = C.NumberToText(errHandle, (*C.char)(unsafe.Pointer(&txt[0])), &buflen, &arr[i])
-			if ok != C.TRUE {
-				break
-			}
-			txt = txt[:int(buflen)]
-			Log.Info("[]sqlhlp.NullFloat64", "num", d.Float64, "txt", string(txt))
+			/*
+				txt := make([]byte, 64)
+				buflen := C.ub4(len(txt))
+				ok = C.NumberToText(errHandle, (*C.char)(unsafe.Pointer(&txt[0])), &buflen, arr[i])
+				if ok != C.TRUE {
+					break
+				}
+				txt = txt[:int(buflen)]
+				Log.Info("[]sqlhlp.NullFloat64", "num", d.Float64, "txt", string(txt))
+			*/
 		}
 		if ok == C.TRUE {
-			ok = C.OCI_BindArrayOfNumbers(h, nm, &arr[0], C.uint(cap(arr)))
+			//ok = C.OCI_BindArrayOfNumbers(h, nm, &arr[0], C.uint(cap(arr)))
+			ok = C.OCI_BindArrayOfNumbers2(h, nm, &arr[0], C.uint(cap(arr)))
 		}
 		if ok == C.TRUE {
 			bnd := C.OCI_GetBind2(h, nm)
