@@ -208,17 +208,26 @@ Outer:
 	case *float64:
 		ok = C.OCI_BindDouble(h, nm, (*C.double)(x))
 	case []float64:
-		num := make([]C.OCINumber, len(x), cap(x))
-		for i, f := range x {
-			var n OCINumber
-			num[i] = *n.SetFloat(f).COCINumber()
-			//Log.Debug("setfloat", "f", f, "OCINumber", n.SetFloat(f).String())
+		ok = C.TRUE
+		if false {
+			ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(cap(x)))
+		} else {
+			num := make([]C.OCINumber, len(x), cap(x))
+			n := new(OCINumber)
+			for i, f := range x {
+				num[i] = *(n.SetFloat(f).COCINumber())
+				//Log.Debug("setfloat", "f", f, "OCINumber", n.SetFloat(f).String())
+			}
+			Log.Info("num2", "x", x, "arr", num)
+			if ok == C.TRUE {
+				ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
+			}
+			bnd := C.OCI_GetBind2(h, nm)
+			dat := C.OCI_BindGetData(bnd)
+			Log.Info("num3", "count", C.OCI_BindGetDataCount(bnd),
+				"&num[0]", &num[0], "bnd", dat,
+				"first", new(OCINumber).SetCOCINumber(*(*C.OCINumber)(dat)).String())
 		}
-		Log.Info("num2", "x", x, "arr", num)
-		if ok == C.TRUE {
-			ok = C.OCI_BindArrayOfNumbers(h, nm, &num[0], C.uint(cap(num)))
-		}
-		//ok = C.OCI_BindArrayOfDoubles(h, nm, (*C.double)(&x[0]), C.uint(cap(x)))
 		/*
 			errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
 			num := make([]C.OCINumber, len(x), cap(x))
@@ -279,6 +288,13 @@ Outer:
 		}
 		if ok == C.TRUE {
 			bnd := C.OCI_GetBind2(h, nm)
+			dat := C.OCI_BindGetData(bnd)
+			str := "null"
+			if dat != nil {
+				str = new(OCINumber).SetCOCINumber(**((**C.OCINumber)(dat))).String()
+			}
+			Log.Info("nullFloat3", "count", C.OCI_BindGetDataCount(bnd),
+				"&arr[0]", &arr[0], "bnd", dat, "first", str)
 			for i := 0; i < cap(arr); i++ {
 				if i < len(x) && x[i].Valid {
 					continue

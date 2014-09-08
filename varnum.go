@@ -75,6 +75,9 @@ func (n OCINumber) String() string {
 	var txt [42]byte
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
 	length := n[0]
+	if length > OciNumberSize-2 {
+		length = OciNumberSize - 2
+	}
 	first := n[1]
 	positive := first&0x80 > 0
 	exp := first & 0x7f
@@ -110,7 +113,12 @@ func (n OCINumber) String() string {
 		exp = ^exp - 128 - 64
 		txt[0] = '-'
 		i = 1
-		for j := byte(0); j < exp; j++ {
+		m := exp
+		if m > length {
+			m = length
+		}
+		Log.Debug("neg", "exp", exp, "length", length)
+		for j := byte(0); j < m; j++ {
 			digit := 101 - n[j+2]
 			if j != 0 || digit > 10 {
 				txt[i] = '0' + digit/10
@@ -142,6 +150,9 @@ func (n *OCINumber) SetBytes(data []byte) *OCINumber {
 }
 
 func (n *OCINumber) SetString(txt string) *OCINumber {
+	if n == nil {
+		return nil
+	}
 	if txt == "" {
 		n[0] = 0xff
 		return n

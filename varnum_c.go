@@ -30,8 +30,9 @@ import (
 )
 
 // SetCOCINumber sets this OCINumber to the same value as the given C.OCINumber.
-func (n *OCINumber) SetCOCINumber(m C.OCINumber) {
+func (n *OCINumber) SetCOCINumber(m C.OCINumber) *OCINumber {
 	C.memcpy(unsafe.Pointer(&n[0]), unsafe.Pointer(&m), OciNumberSize)
+	return n
 }
 
 // COCINumber returns a *C.OCINumber, backed by this OCINumber.
