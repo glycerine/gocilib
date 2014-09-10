@@ -66,10 +66,14 @@ const OciNumberSize = 22
 
 type OCINumber [OciNumberSize]byte
 
+func (n OCINumber) Valid() bool {
+	return !(n[0] == 0xff || n[0] == 0 && n[1] == 0)
+}
+
 func (n OCINumber) String() string {
 	Log.SetHandler(log15.StderrHandler)
 
-	if n[0] == 0xff { // NULL
+	if !n.Valid() {
 		return ""
 	}
 	var txt [42]byte
@@ -194,11 +198,63 @@ func (n *OCINumber) SetFloat(f float64) *OCINumber {
 	return n.SetString(strconv.FormatFloat(f, 'g', 38, 64))
 }
 
+func (n *OCINumber) SetInt(i int64) *OCINumber {
+	return n.SetString(strconv.FormatInt(i, 10))
+}
+
 func (n *OCINumber) SetDec(dec *inf.Dec) *OCINumber {
 	return n.SetString(dec.String())
 }
 
+func (n *OCINumber) Set(m *OCINumber) *OCINumber {
+	return n.SetBytes(m[:])
+}
+
 // Dec sets the given inf.Dec to the value of OCINumber.
-func (n OCINumber) Dec(dec *inf.Dec) {
+func (n OCINumber) Dec(dec *inf.Dec) *inf.Dec {
+	if dec == nil {
+		dec = inf.NewDec(n.Unscaled(), inf.Scale(n.Scale()))
+	}
 	dec.SetString(n.String())
+	return dec
+}
+
+// Unscaled returns the unscaled value.
+func (n OCINumber) Unscaled() int64 {
+	length := n[0]
+	if length > OciNumberSize-2 {
+		length = OciNumberSize - 2
+	}
+	first := n[1]
+	positive := first&0x80 > 0
+	exp := first & 0x7f
+	var unscaled int64
+	if positive {
+		exp = exp + 128 + 64
+		for j := byte(0); j < length; j++ {
+			if j == length-1 && n[j+2] == 0 {
+				break
+			}
+			digit := n[j+2] - 1
+			unscaled = unscaled*100 + int64(digit)
+		}
+	} else {
+		for j := byte(0); j < length; j++ {
+			digit := 101 - n[j+2]
+			unscaled = unscaled*100 + int64(digit)
+		}
+		unscaled = -unscaled
+	}
+	return unscaled
+}
+
+// Scale returns the scale.
+func (n OCINumber) Scale() int32 {
+	first := n[1]
+	positive := first&0x80 > 0
+	exp := first & 0x7f
+	if positive {
+		return int32(exp + 128 + 64)
+	}
+	return int32(^exp - 128 - 64)
 }

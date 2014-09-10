@@ -27,7 +27,7 @@ limitations under the License.
 #define OCI_BIND_INPUT 1
 #define OCI_BIND_OUTPUT 2
 
-#define OCI_NUM_NUMBER 0
+const int OCI_NUM_NUMBER = 0;
 
 boolean OCI_API OCI_BindNumber
 (

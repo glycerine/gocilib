@@ -21,6 +21,7 @@ package gocilib
 #include <ocilib.h>
 #include <oci.h>
 
+extern unsigned int OCI_NUM_NUMBER;
 const int sof_OCI_DateP = sizeof(OCI_Date*);
 const int sof_OCI_IntervalP = sizeof(OCI_Interval*);
 
@@ -35,6 +36,7 @@ import "C"
 import (
 	"database/sql/driver"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strconv"
 	"time"
@@ -305,6 +307,31 @@ Outer:
 			}
 		}
 
+	case OCINumber:
+		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
+	case *OCINumber:
+		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
+		if ok == C.TRUE && x == nil {
+			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
+		}
+	case []OCINumber:
+		arr := make([]C.OCINumber, len(x), cap(x))
+		for i, n := range x {
+			arr[i] = *n.COCINumber()
+		}
+		ok = C.OCI_BindArrayOfNumbers(h, nm, &arr[0], C.uint(cap(arr)))
+		if ok == C.TRUE {
+			bnd := C.OCI_GetBind2(h, nm)
+			for i := 0; i < cap(arr); i++ {
+				if i < len(x) && x[i].Valid() {
+					continue
+				}
+				if ok = C.OCI_BindSetNullAtPos(bnd, C.uint(i+1)); ok != C.TRUE {
+					break
+				}
+			}
+		}
+
 	case time.Time:
 		od := C.OCI_DateCreate(C.OCI_StatementGetConnection(stmt.handle))
 		y, m, d := x.Date()
@@ -487,6 +514,7 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			i int64
 			u uint64
 			f float64
+			n OCINumber
 		)
 		if !isNull {
 			switch sub {
@@ -494,34 +522,70 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 				i = int64(int16(*(*C.short)(data)))
 				u = uint64(i)
 				f = float64(i)
+				n.SetInt(i)
 			case C.OCI_NUM_INT:
 				i = int64(int32(*(*C.int)(data)))
 				u = uint64(i)
 				f = float64(i)
+				n.SetInt(i)
 			case C.OCI_NUM_BIGINT:
 				i = int64(*(*C.long)(data))
 				u = uint64(i)
 				f = float64(i)
+				n.SetInt(i)
 			case C.OCI_NUM_USHORT:
 				u = uint64(*(*C.ushort)(data))
 				i = int64(u)
 				f = float64(u)
+				n.SetInt(int64(u))
 			case C.OCI_NUM_UINT:
 				u = uint64(*(*C.uint)(data))
 				i = int64(u)
 				f = float64(u)
+				n.SetInt(int64(u))
 			case C.OCI_NUM_BIGUINT:
 				u = uint64(*(*C.ulong)(data))
 				i = int64(u)
 				f = float64(u)
+				n.SetInt(int64(u))
 			case C.OCI_NUM_FLOAT:
 				f = float64(*(*C.float)(data))
 				i = int64(f)
 				u = uint64(f)
+				n.SetFloat(f)
 			case C.OCI_NUM_DOUBLE:
 				f = float64(*(*C.double)(data))
 				i = int64(f)
 				u = uint64(f)
+				n.SetFloat(f)
+			case C.OCI_NUM_NUMBER:
+				n.SetCOCINumberP((*C.OCINumber)(data))
+				dec := n.Dec(nil)
+				unscaled := dec.UnscaledBig()
+				scale := int32(dec.Scale())
+				scaled := unscaled
+				rat := big.NewRat(1, 1)
+				rat.SetInt(unscaled)
+				if scale > 0 {
+					mul := int64(1)
+					for j := int32(0); j < scale; j++ {
+						mul *= 10
+					}
+					mI := big.NewInt(mul)
+					scaled = scaled.Mul(unscaled, mI)
+					rat.SetInt(scaled)
+				} else {
+					mul := int64(1)
+					for j := int32(0); j > scale; j-- {
+						mul *= 10
+					}
+					mI := big.NewInt(mul)
+					scaled.Div(scaled, mI)
+					rat.SetFrac(unscaled, mI)
+				}
+				i = scaled.Int64()
+				f, _ = rat.Float64()
+				u = uint64(i)
 			}
 		}
 
@@ -595,6 +659,19 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 				x.Valid = true
 				x.Float64 = f
 			}
+
+		case OCINumber:
+			if isNull {
+				return OCINumber{}, nil
+			}
+			return n, nil
+		case *OCINumber:
+			if isNull {
+				x.SetString("")
+			} else {
+				x.Set(&n)
+			}
+			return x, nil
 
 		default:
 			return dst, fmt.Errorf("bindInto: int is needed, not %T", dst)

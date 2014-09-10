@@ -62,10 +62,12 @@ func TestInBindFloat(t *testing.T) {
 	}
 	defer st.Close()
 
+	var n OCINumber
 	for i, inp := range []driver.Value{
 		sqlhlp.NullFloat64{Valid: true, Float64: 3.14},
 		float32(3.14),
 		float64(3.14),
+		n.SetString("3.14"),
 	} {
 		ret := NewStringVar("", 1000)
 		if err := st.BindExecute(`DECLARE

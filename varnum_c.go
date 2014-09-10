@@ -35,6 +35,11 @@ func (n *OCINumber) SetCOCINumber(m C.OCINumber) *OCINumber {
 	return n
 }
 
+func (n *OCINumber) SetCOCINumberP(m *C.OCINumber) *OCINumber {
+	C.memcpy(unsafe.Pointer(&n[0]), unsafe.Pointer(m), OciNumberSize)
+	return n
+}
+
 // COCINumber returns a *C.OCINumber, backed by this OCINumber.
 func (n OCINumber) COCINumber() *C.OCINumber {
 	return (*C.OCINumber)(unsafe.Pointer(&n))
