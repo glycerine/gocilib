@@ -54,36 +54,48 @@ END;`,
 	}
 }
 func TestInBindFloat(t *testing.T) {
+	Log.SetHandler(log15.StderrHandler)
 	conn := getConnection(t)
-	st, err := conn.NewStatement()
-	if err != nil {
-		t.Errorf("new statement: %v", err)
-		return
-	}
-	defer st.Close()
 
+	if err := conn.SetServerOutput(1000000); err != nil {
+		t.Fatalf("cannot set server output: %v", err)
+	}
 	var n OCINumber
+	var lines []string
 	for i, inp := range []driver.Value{
 		sqlhlp.NullFloat64{Valid: true, Float64: 3.14},
 		float32(3.14),
 		float64(3.14),
-		n.SetString("3.14"),
+		*n.SetString("3.14"),
 	} {
+		st, err := conn.NewStatement()
+		if err != nil {
+			t.Errorf("new statement: %v", err)
+			return
+		}
 		ret := NewStringVar("", 1000)
-		if err := st.BindExecute(`DECLARE
-	num NUMBER := :1;
+		params := []driver.Value{inp, ret}
+		err = st.BindExecute(`DECLARE
+	num NUMBER := :1; dmp VARCHAR2(1000);
 BEGIN
+  SELECT DUMP(num) INTO dmp FROM DUAL;
+  DBMS_OUTPUT.PUT_LINE('num='||num||' = '||dmp);
   :2 := TO_CHAR(num);
 END;`,
-			[]driver.Value{inp, ret}, nil,
-		); err != nil {
+			params, nil,
+		)
+		t.Logf("%d. params=%#v err=%v", i, params, err)
+		if err != nil {
 			t.Errorf("%d. err: %v", i, err)
 		}
+		t.Logf("%d. serveroutput lines: %s", i, conn.GetServerOutput(lines[:0], -1))
 		if !strings.HasPrefix(ret.String(), "3.140") {
 			t.Errorf("%d. awaited 2, got %q", i, ret.String())
 		}
+		st.Close()
 	}
 }
+
 func TestInBindFloatArray(t *testing.T) {
 	Log.SetHandler(log15.StderrHandler)
 	conn := getConnection(t)

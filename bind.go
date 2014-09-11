@@ -309,6 +309,9 @@ Outer:
 
 	case OCINumber:
 		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
+		if ok == C.TRUE {
+			ok = C.OCI_BindSetDirection(C.OCI_GetBind2(h, nm), C.OCI_BDM_IN)
+		}
 	case *OCINumber:
 		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
 		if ok == C.TRUE && x == nil {
@@ -481,31 +484,25 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 	typ, sub := C.OCI_BindGetType(bnd), C.uint(0)
 	data := C.OCI_BindGetData(bnd)
 	switch typ {
-	case C.OCI_CDT_NUMERIC:
-		fallthrough
-	case C.OCI_CDT_LOB:
-		fallthrough
-	case C.OCI_CDT_FILE:
-		fallthrough
-	case C.OCI_CDT_TIMESTAMP:
-		fallthrough
-	case C.OCI_CDT_LONG:
-		fallthrough
-	case C.OCI_CDT_INTERVAL:
+	case C.OCI_CDT_NUMERIC,
+		C.OCI_CDT_LOB,
+		C.OCI_CDT_FILE,
+		C.OCI_CDT_TIMESTAMP,
+		C.OCI_CDT_LONG,
+		C.OCI_CDT_INTERVAL:
 		sub = C.OCI_BindGetSubtype(bnd)
 	}
 
 	isNull := data == nil || C.OCI_BindIsNull(bnd) == C.TRUE
 	Log.Debug("getBindInto", "bind", bnd,
+		"dir", C.OCI_BindGetDirection(bnd),
 		"bind", log15.Lazy{func() string { return fmt.Sprintf("%T", dst) }},
 		"typ", typ, "sub", sub, "isNull?", isNull,
 		"dst", log15.Lazy{func() string { return fmt.Sprintf("%#v", dst) }},
 	)
 
 	defer func() {
-		Log.Debug("getBindInto",
-			"res", log15.Lazy{func() string { return fmt.Sprintf("v=%#v (%T)", val, val) }},
-			"error", err)
+		Log.Debug("getBindInto", "res", LazyPrint(val), "error", err)
 	}()
 
 	switch typ {
@@ -589,7 +586,7 @@ func getBindInto(dst driver.Value, bnd *C.OCI_Bind) (val driver.Value, err error
 			}
 		}
 
-		Log.Debug("data", "int", i, "uint", u, "float", f)
+		Log.Debug("data", "int", i, "uint", u, "float", f, "OCINumber", LazyPrint(n.String()))
 
 		switch x := dst.(type) {
 		case int16:
@@ -797,4 +794,8 @@ func byteString(data unsafe.Pointer) []byte {
 		}
 	}
 	return b[:len(b):len(b)]
+}
+
+func LazyPrint(v interface{}) log15.Lazy {
+	return log15.Lazy{func() string { return fmt.Sprintf("%#v", v) }}
 }

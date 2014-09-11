@@ -24,7 +24,7 @@ import "C"
 import (
 	"database/sql/driver"
 	"errors"
-	"fmt"
+	"strconv"
 )
 
 const defaultPrefetchMemory = 1 << 20 // 1Mb
@@ -140,9 +140,12 @@ func (stmt *Statement) BindExecute(
 			return getLastErr()
 		}
 		for i, a := range arrayArgs {
-			if err := stmt.BindPos(i+1, a); err != nil {
+			if err := stmt.BindName(":"+strconv.Itoa(i+1), a); err != nil {
+				//if err := stmt.BindPos(i+1, a); err != nil {
 				return err
 			}
+			bnd := C.OCI_GetBind2(stmt.handle, C.CString(":"+strconv.Itoa(i+1)))
+			Log.Debug("A", "i", i, "bnd", bnd, "typ", C.OCI_BindGetType(bnd))
 		}
 	} else if len(mapArgs) > 0 {
 		if C.OCI_SetBindMode(stmt.handle, C.OCI_BIND_BY_NAME) != C.TRUE {
@@ -159,23 +162,26 @@ func (stmt *Statement) BindExecute(
 	}
 
 	if len(arrayArgs) > 0 {
+		Log.Debug("after exec", "arrayArgs", LazyPrint(arrayArgs))
 		for i, value := range arrayArgs {
-			bnd := C.OCI_GetBind(stmt.handle, C.uint(i+1))
+			bnd := C.OCI_GetBind2(stmt.handle, C.CString(":"+strconv.Itoa(i+1)))
+			Log.Debug("arrayArgs", "i", i, "bnd", LazyPrint(bnd), "typ", C.OCI_BindGetType(bnd), "dir", C.OCI_BindGetDirection(bnd), "array", LazyPrint(arrayArgs))
 			if bnd == nil || C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
 				continue
 			}
 			var err error
-			Log.Debug("arrayArgs", "i", i, "bnd", fmt.Sprintf("%#v", bnd))
 			if arrayArgs[i], err = getBindInto(value, bnd); err != nil {
 				return err
 			}
 		}
 	} else if len(mapArgs) > 0 {
+		Log.Debug("after exec", "mapArgs", LazyPrint(mapArgs))
 		for nm, value := range mapArgs {
 			bnd := C.OCI_GetBind2(stmt.handle, C.CString(nm))
-			if C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
+			if bnd == nil || C.OCI_BindGetDirection(bnd) == C.OCI_BDM_IN {
 				continue
 			}
+			Log.Debug("arrayArgs", "nm", nm, "bnd", LazyPrint(bnd), "map", LazyPrint(mapArgs))
 			var err error
 			if mapArgs[nm], err = getBindInto(value, bnd); err != nil {
 				return err
