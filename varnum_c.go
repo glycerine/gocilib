@@ -26,6 +26,7 @@ package gocilib
 import "C"
 
 import (
+	"strings"
 	"unsafe"
 )
 
@@ -42,5 +43,21 @@ func (n *OCINumber) SetCOCINumberP(m *C.OCINumber) *OCINumber {
 
 // COCINumber returns a *C.OCINumber, backed by this OCINumber.
 func (n OCINumber) COCINumber() *C.OCINumber {
-	return (*C.OCINumber)(unsafe.Pointer(&n))
+	return (*C.OCINumber)(unsafe.Pointer(&n[0]))
+}
+
+func GetCOCINumber(text string) *C.OCINumber {
+	on := new(C.OCINumber)
+	i := strings.IndexByte(text, '.')
+	var format string
+	if i < 0 {
+		format = strings.Repeat("9", len(text))
+	} else {
+		format = strings.Repeat("9", i) + "." + strings.Repeat("9", len(text)-1-i)
+	}
+	Log.Debug("GetCOCINumber", "text", text, "format", format)
+	C.OCINumberFromText(anErrHandle,
+		(*C.oratext)(unsafe.Pointer(C.CString(text))), C.ub4(len(text)),
+		(*C.oratext)(unsafe.Pointer(C.CString(format))), C.ub4(len(format)), nil, 0, on)
+	return on
 }

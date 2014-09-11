@@ -16,8 +16,9 @@ limitations under the License.
 
 package gocilib
 
-// #cgo LDFLAGS: -locilib
-// #include "ocilib.h"
+// #cgo LDFLAGS: -locilib -lclntsh
+// #include <ocilib.h>
+// #include <oci.h>
 //
 // // extern int initialize();
 import "C"
@@ -35,6 +36,7 @@ import (
 // Log os a log15.Logger - use gocilib.Log.SetHandler to set it to logging,
 // as by default it uses log15.DiscardHandler.
 var Log = log15.New("lib", "gocilib")
+var anErrHandle *C.OCIError
 
 func init() {
 	Log.SetHandler(log15.DiscardHandler())
@@ -93,6 +95,7 @@ func NewConnection(user, passwd, sid string) (*Connection, error) {
 	}
 	connNum++
 	connNumMu.Unlock()
+	anErrHandle = (*C.OCIError)(C.OCI_HandleGetError(conn.handle)) // FIXME: ugly hack
 	return &conn, (&conn).SetAutoCommit(false)
 }
 

@@ -154,6 +154,13 @@ func (n *OCINumber) SetBytes(data []byte) *OCINumber {
 }
 
 func (n *OCINumber) SetString(txt string) *OCINumber {
+	if false {
+		on := GetCOCINumber(txt)
+		n.SetCOCINumberP(on)
+		Log.Debug("SetString", "txt", txt, "on", on, "n", LazyPrint(n))
+		return n
+	}
+
 	if n == nil {
 		return nil
 	}
