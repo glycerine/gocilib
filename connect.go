@@ -155,6 +155,50 @@ func (conn *Connection) Close() error {
 	return err
 }
 
+// SetServerOutpit is like "SET SERVEROUTPUT ON SIZE bufsize" in SQL*PLUS.
+// bufsize's minimal value is 2000, maximal value is 1000000.
+//
+// If bufsize <= 0, then the server output is disabled.
+func (conn *Connection) SetServerOutput(bufsize int) error {
+	if bufsize <= 0 {
+		if C.TRUE != C.OCI_ServerDisableOutput(conn.handle) {
+			return getLastErr()
+		}
+		return nil
+	}
+	if bufsize < 2000 {
+		bufsize = 2000
+	}
+	if C.TRUE != C.OCI_ServerEnableOutput(conn.handle, C.uint(bufsize), 5, 32767) {
+		return getLastErr()
+	}
+	return nil
+}
+
+// GetServerOutput returns the serveroutput lines, till the max.
+// The lines will be appended to the lines argument, which can be nil.
+func (conn *Connection) GetServerOutput(lines []string, max int) []string {
+	if max < 0 {
+		for {
+			line := C.OCI_ServerGetOutput(conn.handle)
+			if line == nil {
+				return lines
+			}
+			lines = append(lines, C.GoString(line))
+		}
+		return lines
+	}
+
+	for i := 0; i < max; i++ {
+		line := C.OCI_ServerGetOutput(conn.handle)
+		if line == nil {
+			return lines
+		}
+		lines = append(lines, C.GoString(line))
+	}
+	return lines
+}
+
 func getLastErr() error {
 	ociErr := C.OCI_GetLastError()
 	if ociErr == nil {
