@@ -70,6 +70,20 @@ func (n OCINumber) Valid() bool {
 	return !(n[0] == 0xff || n[0] == 0 && n[1] == 0)
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func (n OCINumber) String() string {
 	Log.SetHandler(log15.StderrHandler)
 
@@ -79,24 +93,17 @@ func (n OCINumber) String() string {
 	var txt [42]byte
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
 	length := n[0] - 1
-	if length > OciNumberSize-2 {
-		length = OciNumberSize - 2
+	if length > OciNumberSize-1 {
+		length = OciNumberSize - 1
 	}
 	first := n[1]
 	positive := first&0x80 > 0
 	exp := first & 0x7f
-	i := 0
+	var i, j byte
 	if positive {
 		exp = exp + 128 + 64
-		m := exp
-		if m > length {
-			m = length
-		}
 		var j byte
-		for j = byte(0); j < m; j++ {
-			if j == length-1 && n[j+2] == 0 {
-				break
-			}
+		for j < length {
 			digit := n[j+2] - 1
 			if j != 0 || digit > 10 {
 				txt[i] = '0' + digit/10
@@ -104,28 +111,15 @@ func (n OCINumber) String() string {
 			}
 			txt[i] = '0' + digit%10
 			i++
-		}
-		if j < length {
-			txt[i] = '.'
-			i++
-			for j = j; j < length; j++ {
-				digit := n[j+2] - 1
-				txt[i] = '0' + digit/10
-				txt[i+1] = '0' + digit%10
-				i += 2
-			}
+			j++
 		}
 	} else {
-		exp = ^exp - 128 - 64
+		length--
+		exp = ^exp - 128 - 64 + 1
 		txt[0] = '-'
 		i = 1
-		m := exp
-		if m > length {
-			m = length
-		}
-		Log.Debug("neg", "exp", exp, "length", length)
-		var j byte
-		for j = byte(0); j < m; j++ {
+
+		for j < length {
 			digit := 101 - n[j+2]
 			if j != 0 || digit > 10 {
 				txt[i] = '0' + digit/10
@@ -133,20 +127,19 @@ func (n OCINumber) String() string {
 			}
 			txt[i] = '0' + digit%10
 			i++
+			j++
 		}
-		if exp < length-1 {
-			txt[i] = '.'
-			i++
-			if int(length)+2 > len(n) {
-				length = byte(len(n) - 2)
-			}
-			for j := exp; j < length; j++ {
-				digit := 101 - n[j+2]
-				txt[i] = '0' + digit/10
-				txt[i+1] = '0' + digit%10
-				i += 2
-			}
-		}
+	}
+	for j < exp {
+		txt[i] = '0'
+		i++
+		j++
+	}
+	if txt[i-1] == '0' {
+		i--
+	}
+	if exp < i-1 {
+		return string(txt[:exp]) + "." + string(txt[exp:i])
 	}
 	return string(txt[:i])
 }
@@ -198,6 +191,10 @@ func (n *OCINumber) SetString(txt string) *OCINumber {
 		for i := 0; i < len(txt); i += 2 {
 			j++
 			n[j] = 101 - ((txt[i]-'0')*10 + txt[i+1] - '0')
+		}
+		if j < OciNumberSize-1 {
+			j++
+			n[j] = 102
 		}
 	}
 	n[0] = byte(j)
