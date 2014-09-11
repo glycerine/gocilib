@@ -78,7 +78,7 @@ func (n OCINumber) String() string {
 	}
 	var txt [42]byte
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
-	length := n[0]
+	length := n[0] - 1
 	if length > OciNumberSize-2 {
 		length = OciNumberSize - 2
 	}
@@ -88,7 +88,12 @@ func (n OCINumber) String() string {
 	i := 0
 	if positive {
 		exp = exp + 128 + 64
-		for j := byte(0); j < exp; j++ {
+		m := exp
+		if m > length {
+			m = length
+		}
+		var j byte
+		for j = byte(0); j < m; j++ {
 			if j == length-1 && n[j+2] == 0 {
 				break
 			}
@@ -100,13 +105,10 @@ func (n OCINumber) String() string {
 			txt[i] = '0' + digit%10
 			i++
 		}
-		if exp < length-1 {
+		if j < length {
 			txt[i] = '.'
 			i++
-			if int(length)+2 > len(n) {
-				length = byte(len(n) - 2)
-			}
-			for j := exp; j < length; j++ {
+			for j = j; j < length; j++ {
 				digit := n[j+2] - 1
 				txt[i] = '0' + digit/10
 				txt[i+1] = '0' + digit%10
@@ -122,7 +124,8 @@ func (n OCINumber) String() string {
 			m = length
 		}
 		Log.Debug("neg", "exp", exp, "length", length)
-		for j := byte(0); j < m; j++ {
+		var j byte
+		for j = byte(0); j < m; j++ {
 			digit := 101 - n[j+2]
 			if j != 0 || digit > 10 {
 				txt[i] = '0' + digit/10

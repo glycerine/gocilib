@@ -308,12 +308,12 @@ Outer:
 		}
 
 	case OCINumber:
-		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
+		ok = C.OCI_BindNumber(h, nm, x.COCINumber())
 		if ok == C.TRUE {
 			ok = C.OCI_BindSetDirection(C.OCI_GetBind2(h, nm), C.OCI_BDM_IN)
 		}
 	case *OCINumber:
-		ok = C.OCI_BindNumber(h, nm, (*C.OCINumber)(x.COCINumber()))
+		ok = C.OCI_BindNumber(h, nm, x.COCINumber())
 		if ok == C.TRUE && x == nil {
 			ok = C.OCI_BindSetNull(C.OCI_GetBind2(h, nm))
 		}

@@ -43,7 +43,10 @@ func (n *OCINumber) SetCOCINumberP(m *C.OCINumber) *OCINumber {
 
 // COCINumber returns a *C.OCINumber, backed by this OCINumber.
 func (n OCINumber) COCINumber() *C.OCINumber {
-	return (*C.OCINumber)(unsafe.Pointer(&n[0]))
+	//ret := (*C.OCINumber)(unsafe.Pointer(&n[0]))
+	ret := GetCOCINumber(n.String())
+	Log.Debug("COCINumber", "n", n[:], "txt", n.String(), "ret", ret)
+	return ret
 }
 
 func GetCOCINumber(text string) *C.OCINumber {
