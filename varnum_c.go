@@ -26,6 +26,8 @@ package gocilib
 import "C"
 
 import (
+	"database/sql/driver"
+	"io"
 	"strings"
 	"unsafe"
 )
@@ -63,4 +65,53 @@ func GetCOCINumber(text string) *C.OCINumber {
 		(*C.oratext)(unsafe.Pointer(C.CString(text))), C.ub4(len(text)),
 		(*C.oratext)(unsafe.Pointer(C.CString(format))), C.ub4(len(format)), nil, 0, on)
 	return on
+}
+
+type randNum struct {
+	n    *C.OCINumber
+	char string
+	dump string
+}
+
+func makeRandomNumbers(dst chan<- randNum, conn *Connection) error {
+	defer close(dst)
+	qry := `
+		SELECT n, TO_CHAR(n, 'TM9'), DUMP(n) 
+		  FROM (SELECT dbms_random.value + dbms_random.value(-999999999999999999999,
+					999999999999999999999) n
+				  FROM (SELECT NULL FROM all_objects))`
+	st, err := conn.NewStatement()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if err := st.Execute(qry); err != nil {
+		return err
+	}
+	rs, err := st.Results()
+	if err != nil {
+		return err
+	}
+	defer rs.Close()
+
+	var n C.OCINumber
+	nC := NewStringVar("", 1000)
+	dmp := NewStringVar("", 1000)
+	row := []driver.Value{n, &nC, &dmp}
+	for {
+		if err = rs.Next(); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+			break
+		}
+		if err = rs.FetchInto(row); err != nil {
+			return err
+			break
+		}
+		dst <- randNum{&n, nC.String(), dmp.String()}
+		break
+	}
+	return nil
 }
