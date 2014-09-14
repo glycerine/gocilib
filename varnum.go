@@ -90,7 +90,7 @@ func (n OCINumber) String() string {
 	if !n.Valid() {
 		return ""
 	}
-	var txt [42]byte
+	var txt [100]byte
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
 	length := n[0] - 1
 	if length > OciNumberSize-1 {

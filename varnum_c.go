@@ -68,7 +68,6 @@ func GetCOCINumber(text string) *C.OCINumber {
 }
 
 type randNum struct {
-	n    *C.OCINumber
 	char string
 	dump string
 }
@@ -76,10 +75,10 @@ type randNum struct {
 func makeRandomNumbers(dst chan<- randNum, conn *Connection) error {
 	defer close(dst)
 	qry := `
-		SELECT n, TO_CHAR(n, 'TM9'), DUMP(n) 
+		SELECT TO_CHAR(n, 'TM9'), DUMP(n) 
 		  FROM (SELECT dbms_random.value + dbms_random.value(-999999999999999999999,
 					999999999999999999999) n
-				  FROM (SELECT NULL FROM all_objects))`
+				  FROM (SELECT NULL FROM all_objects, all_objects, all_objects))`
 	st, err := conn.NewStatement()
 	if err != nil {
 		return err
@@ -94,10 +93,10 @@ func makeRandomNumbers(dst chan<- randNum, conn *Connection) error {
 	}
 	defer rs.Close()
 
-	var n C.OCINumber
-	nC := NewStringVar("", 1000)
-	dmp := NewStringVar("", 1000)
-	row := []driver.Value{n, &nC, &dmp}
+	var (
+		nC, dmp string
+	)
+	row := []driver.Value{&nC, &dmp}
 	for {
 		if err = rs.Next(); err != nil {
 			if err == io.EOF {
@@ -110,8 +109,7 @@ func makeRandomNumbers(dst chan<- randNum, conn *Connection) error {
 			return err
 			break
 		}
-		dst <- randNum{&n, nC.String(), dmp.String()}
-		break
+		dst <- randNum{nC, dmp}
 	}
 	return nil
 }

@@ -17,10 +17,20 @@ limitations under the License.
 package gocilib
 
 import (
+	"bytes"
+	"strconv"
+	"strings"
 	"testing"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestOCINumberDB(t *testing.T) {
+	Log.SetHandler(log15.StderrHandler)
+	if *fDsn == "" {
+		t.Skip("no -dsn specified, skipping TestOCINumberDB.")
+		return
+	}
 	conn := getConnection(t)
 
 	randNums := make(chan randNum)
@@ -31,7 +41,38 @@ func TestOCINumberDB(t *testing.T) {
 		}
 	}()
 
+	var n OCINumber
 	for rn := range randNums {
 		t.Logf("%s=%s", rn.char, rn.dump)
+		txt := rn.dump[10:]
+		i := strings.IndexByte(txt, ':')
+		length, err := strconv.Atoi(txt[:i])
+		if err != nil {
+			t.Fatalf("error parsing %s: %v", txt, err)
+		}
+		n[0] = byte(length)
+		for j, txt := range strings.SplitN(txt[i+2:], ",", length) {
+			k, err := strconv.Atoi(txt)
+			if err != nil {
+				t.Fatalf("error parsing %s: %v", txt, err)
+			}
+			n[j+1] = byte(k)
+		}
+		for j := length + 1; j < OciNumberSize; j++ {
+			n[j] = 0
+		}
+		t.Logf("%s => %v", rn.dump, n[:])
+
+		got := n.String()
+		if got != rn.char {
+			t.Errorf("got %s, awaited %s", got, rn.char)
+			continue
+		}
+		var m OCINumber
+		m.SetString(rn.char)
+		if !bytes.Equal(m[:], n[:]) {
+			t.Errorf("got %v, awaited %v", m[:], n[:])
+			continue
+		}
 	}
 }
