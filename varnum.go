@@ -84,62 +84,83 @@ func max(a, b int) int {
 	return b
 }
 
+// http://www.orafaq.com/wiki/NUMBER
+//
 func (n OCINumber) String() string {
 	Log.SetHandler(log15.StderrHandler)
 
 	if !n.Valid() {
 		return ""
 	}
-	var txt [100]byte
+	var backingArr [127]byte
+	txt := backingArr[:]
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
 	length := n[0] - 1
 	if length > OciNumberSize-1 {
 		length = OciNumberSize - 1
 	}
 	first := n[1]
+
+	// The high-order bit of the exponent byte is the sign bit
+	// it is set for positive numbers and it is cleared for negative numbers
 	positive := first&0x80 > 0
-	exp := first & 0x7f
+
+	// The lower 7 bits represent the exponent, which is a base-100 digit with an offset of 65.
+	exp := int(first & 0x7f)
 	var i, j byte
 	if positive {
-		exp = exp + 128 + 64
+		exp = 2*int((byte(exp)+128+64)) - 1
 		var j byte
-		for j < length {
+		for j = 0; j < length; j++ {
+			// Each mantissa byte is a base-100 digit, in the range 1..100.
+			// For positive numbers, the digit has 1 added to it.
 			digit := n[j+2] - 1
-			if j != 0 || digit > 10 {
-				txt[i] = '0' + digit/10
-				i++
-			}
-			txt[i] = '0' + digit%10
-			i++
-			j++
+			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
+			i += 2
+		}
+		if txt[0] == '0' {
+			txt = txt[1:]
+			i--
 		}
 	} else {
 		length--
-		exp = ^exp - 128 - 64 + 1
-		txt[0] = '-'
+		exp = 2*int(^byte(exp)-128-65) + 1
 		i = 1
 
-		for j < length {
+		for j = 0; j < length; j++ {
 			digit := 101 - n[j+2]
-			if j != 0 || digit > 10 {
-				txt[i] = '0' + digit/10
-				i++
-			}
-			txt[i] = '0' + digit%10
-			i++
-			j++
+			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
+			i += 2
 		}
+		if txt[1] == '0' {
+			txt = txt[1:]
+			i--
+		}
+		txt[0] = '-'
 	}
-	for j < exp {
+	Log.Debug("String", "n", n[:], "exp", exp, "length", length, "i", i, "j", j)
+	for int(i) < exp {
+		Log.Debug("0", "i", i, "exp", exp)
 		txt[i] = '0'
 		i++
-		j++
 	}
 	if txt[i-1] == '0' {
 		i--
 	}
-	if exp < i-1 {
+	if positive && exp < int(i) {
+		// strip following zeroes
+		for j = i - 1; int(j) >= exp; j-- {
+			Log.Debug("p", "j", j, "exp", exp)
+			if txt[j] == '0' {
+				i--
+			} else {
+				break
+			}
+		}
 		return string(txt[:exp]) + "." + string(txt[exp:i])
+	}
+	if !positive && exp+1 < int(i) {
+		return string(txt[:exp+1]) + "." + string(txt[exp+1:i])
 	}
 	return string(txt[:i])
 }
