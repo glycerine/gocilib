@@ -18,6 +18,7 @@ package gocilib
 
 import (
 	"bytes"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,7 +54,13 @@ func TestOCINumberDB(t *testing.T) {
 		if time.Since(start) > dur {
 			break
 		}
-		rn, st, err = makeRandomNumber(st, conn)
+		i := 1 + rand.Intn(21)
+		j := rand.Intn(i)
+		pattern := strings.Repeat("9", i)
+		if j > 0 {
+			pattern = pattern[j:] + "." + pattern[j:]
+		}
+		rn, err = makeRandomNumber(conn, pattern)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +70,7 @@ func TestOCINumberDB(t *testing.T) {
 		}
 		t.Logf("%s=%s", rn.char, rn.dump)
 		txt := rn.dump[10:]
-		i := strings.IndexByte(txt, ':')
+		i = strings.IndexByte(txt, ':')
 		length, err := strconv.Atoi(txt[:i])
 		if err != nil {
 			t.Fatalf("error parsing %s: %v", txt, err)

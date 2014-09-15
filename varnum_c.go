@@ -71,36 +71,37 @@ type randNum struct {
 	dump string
 }
 
-func makeRandomNumber(st *Statement, conn *Connection) (randNum, *Statement, error) {
+func makeRandomNumber(conn *Connection, pattern string) (randNum, error) {
 	var rn randNum
 	qry := ""
-	var err error
-	if st == nil {
-		qry = `
-		SELECT TO_CHAR(n, 'TM9'), DUMP(n) 
-		  FROM (SELECT dbms_random.value +
-		               dbms_random.value(-999999999999999999999, 999999999999999999999) n
-			      FROM DUAL)`
-		st, err = conn.NewStatement()
-		if err != nil {
-			return rn, nil, err
-		}
+	i := strings.IndexByte(pattern, '.')
+	if i >= 0 {
+		qry = "dbms_random.value + dbms_random.value(-" + pattern[:i] + ", " + pattern[:i] + ")"
+	} else {
+		qry = "dbms_random.value(-" + pattern + ", " + pattern + ")"
 	}
+	qry = `SELECT TO_CHAR(n), DUMP(n) FROM (SELECT TO_NUMBER(TO_CHAR(` + qry + `, '` + pattern + `')) n FROM DUAL)`
+	Log.Debug("makeRandomNumber", "pattern", pattern, "qry", qry)
+	st, err := conn.NewStatement()
+	if err != nil {
+		return rn, err
+	}
+	defer st.Close()
 	if err := st.Execute(qry); err != nil {
-		return rn, nil, err
+		return rn, err
 	}
 	rs, err := st.Results()
 	if err != nil {
-		return rn, nil, err
+		return rn, err
 	}
 	defer rs.Close()
 
 	row := []driver.Value{&rn.char, &rn.dump}
 	if err = rs.Next(); err != nil {
-		return rn, nil, err
+		return rn, err
 	}
 	if err = rs.FetchInto(row); err != nil {
-		return rn, nil, err
+		return rn, err
 	}
-	return rn, st, nil
+	return rn, nil
 }

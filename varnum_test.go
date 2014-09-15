@@ -26,6 +26,16 @@ func TestOCINumber(t *testing.T) {
 		inp []byte
 		out string
 	}{
+		{[]byte{1, 128}, "0"},
+		{[]byte{2, 193, 2}, "1"},
+		{[]byte{2, 193, 13}, "12"},
+		{[]byte{3, 193, 2, 21}, "1.2"},
+		{[]byte{2, 192, 13}, ".12"},
+		{[]byte{3, 194, 2, 24}, "123"},
+		{[]byte{3, 193, 13, 31}, "12.3"},
+		{[]byte{3, 193, 2, 24}, "1.23"},
+		{[]byte{3, 192, 13, 31}, ".123"},
+		{[]byte{3, 194, 13, 35}, "1234"},
 		{[]byte{21, 52, 92, 80, 53, 90, 70, 61, 95, 14, 32, 44, 47, 7, 17, 53, 39, 51, 19, 8, 65, 31}, "-921481131400687695754.94844862508293367"},
 		{[]byte{21, 53, 46, 11, 38, 37, 86, 76, 77, 14, 71, 32, 98, 5, 4, 57, 18, 64, 51, 6, 95, 45}, "-55906364152524873069.03969744833750950656"},
 		{[]byte{3, 193, 4, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "3.14"},
@@ -48,7 +58,7 @@ func TestOCINumber(t *testing.T) {
 			return
 		}
 		n.SetString(elt.out)
-		if !bytes.Equal(n[:], elt.inp) {
+		if !(n[0] == elt.inp[0] && bytes.Equal(n[:n[0]], elt.inp[:n[0]])) {
 			t.Errorf("%d. SetString mismatch: got %v, awaited %v.", i, n[:], elt.inp)
 			return
 		}
@@ -63,6 +73,7 @@ func TestOCINumberSet(t *testing.T) {
 		t.Logf("%d. %q=%q %v", i, s, got, n[:])
 		if got != s {
 			t.Errorf("%d. got %q, awaited %q.", i, got, s)
+			return
 		}
 	}
 }

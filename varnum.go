@@ -82,8 +82,11 @@ func (n OCINumber) String() string {
 	txt := backingArr[:]
 	// (number) = (sign) 0.(mantissa100 * 100**(exponent100)
 	length := n[0] - 1
-	if length > OciNumberSize-1 {
-		length = OciNumberSize - 1
+	if length == 0 {
+		return "0"
+	}
+	if length > OciNumberSize {
+		length = OciNumberSize
 	}
 	first := n[1]
 
@@ -106,18 +109,16 @@ func (n OCINumber) String() string {
 			i += 2
 		}
 	} else {
-		if length < 20 {
-			length--
-		}
-		m := length
-		if m >= 20 {
-			m--
-		}
 		exp = 2 * (int(^byte(exp)) - 128 - 64)
 		sign = "-"
 
-		for j = 0; j < m; j++ {
-			digit := 101 - n[j+2]
+		Log.Debug("neg", "length", length, "n[length+1]", n[length+1])
+		if length < OciNumberSize-1 && n[length+1] == 102 {
+			length--
+		}
+
+		for j = 2; j < length+2; j++ {
+			digit := 101 - n[j]
 			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
 			i += 2
 		}
@@ -127,9 +128,6 @@ func (n OCINumber) String() string {
 		txt = txt[1:]
 		i--
 		exp--
-	}
-	if txt[i-1] == '0' {
-		i--
 	}
 	if exp < 0 {
 		return sign + "." + strings.Repeat("0", -exp-1) + string(txt[:i])
@@ -144,7 +142,7 @@ func (n OCINumber) String() string {
 				break
 			}
 		}
-		Log.Debug("exp<i", "exp", exp, "i", i, "txt", txt[:])
+		Log.Debug("exp<i", "exp", exp, "i", i, "txt", string(txt[:i]))
 		return sign + string(txt[:exp]) + "." + string(txt[exp:i])
 	}
 	if exp > int(i) {
@@ -185,27 +183,34 @@ func (n *OCINumber) SetString(txt string) *OCINumber {
 	} else {
 		dot = len(txt)
 	}
-	if len(txt)%2 == 1 {
+	if dot%2 == 1 {
 		txt = "0" + txt
+	}
+	if len(txt)%2 > 0 {
+		txt = txt + "0"
 	}
 	j := 1
 	if positive {
 		n[j] = byte((dot+1)/2 + 128 + 64)
+		j++
+		Log.Debug("SetString", "txt", txt)
 		for i := 0; i < len(txt); i += 2 {
-			j++
 			n[j] = 1 + ((txt[i]-'0')*10 + txt[i+1] - '0')
+			j++
 		}
 	} else {
 		n[j] = ^byte((dot+1)/2 + 128 + 64)
+		j++
 		for i := 0; i < len(txt); i += 2 {
-			j++
 			n[j] = 101 - ((txt[i]-'0')*10 + txt[i+1] - '0')
+			j++
 		}
 		if j < OciNumberSize-1 {
-			j++
 			n[j] = 102
+			j++
 		}
 	}
+	j--
 	n[0] = byte(j)
 	return n
 }
