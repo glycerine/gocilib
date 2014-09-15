@@ -227,8 +227,7 @@ Outer:
 			bnd := C.OCI_GetBind2(h, nm)
 			dat := C.OCI_BindGetData(bnd)
 			Log.Info("num3", "count", C.OCI_BindGetDataCount(bnd),
-				"&num[0]", &num[0], "bnd", dat,
-				"first", new(OCINumber).SetCOCINumber(*(*C.OCINumber)(dat)).String())
+				"&num[0]", &num[0], "bnd", dat)
 		}
 		/*
 			errHandle := (*C.OCIError)(C.OCI_HandleGetError(C.OCI_StatementGetConnection(stmt.handle)))
@@ -291,12 +290,8 @@ Outer:
 		if ok == C.TRUE {
 			bnd := C.OCI_GetBind2(h, nm)
 			dat := C.OCI_BindGetData(bnd)
-			str := "null"
-			if dat != nil {
-				str = new(OCINumber).SetCOCINumber(**((**C.OCINumber)(dat))).String()
-			}
 			Log.Info("nullFloat3", "count", C.OCI_BindGetDataCount(bnd),
-				"&arr[0]", &arr[0], "bnd", dat, "first", str)
+				"&arr[0]", &arr[0], "bnd", dat)
 			for i := 0; i < cap(arr); i++ {
 				if i < len(x) && x[i].Valid {
 					continue

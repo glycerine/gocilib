@@ -44,8 +44,8 @@ func (n *OCINumber) SetCOCINumberP(m *C.OCINumber) *OCINumber {
 
 // COCINumber returns a *C.OCINumber, backed by this OCINumber.
 func (n OCINumber) COCINumber() *C.OCINumber {
-	//ret := (*C.OCINumber)(unsafe.Pointer(&n[0]))
-	ret := GetCOCINumber(n.String())
+	ret := (*C.OCINumber)(unsafe.Pointer(&n[0]))
+	//ret := GetCOCINumber(n.String())
 	Log.Debug("COCINumber", "n", n[:], "txt", n.String(), "ret", ret)
 	return ret
 }
@@ -81,7 +81,6 @@ func makeRandomNumber(conn *Connection, pattern string) (randNum, error) {
 		qry = "dbms_random.value(-" + pattern + ", " + pattern + ")"
 	}
 	qry = `SELECT TO_CHAR(n), DUMP(n) FROM (SELECT TO_NUMBER(TO_CHAR(` + qry + `, '` + pattern + `')) n FROM DUAL)`
-	Log.Debug("makeRandomNumber", "pattern", pattern, "qry", qry)
 	st, err := conn.NewStatement()
 	if err != nil {
 		return rn, err

@@ -62,17 +62,18 @@ func TestInBindFloat(t *testing.T) {
 	}
 	var n OCINumber
 	var lines []string
+	st, err := conn.NewStatement()
+	if err != nil {
+		t.Errorf("new statement: %v", err)
+		return
+	}
+	defer st.Close()
 	for i, inp := range []driver.Value{
+		*n.SetString("3.14"),
 		sqlhlp.NullFloat64{Valid: true, Float64: 3.14},
 		float32(3.14),
 		float64(3.14),
-		*n.SetString("3.14"),
 	} {
-		st, err := conn.NewStatement()
-		if err != nil {
-			t.Errorf("new statement: %v", err)
-			return
-		}
 		ret := NewStringVar("", 1000)
 		params := []driver.Value{inp, ret}
 		err = st.BindExecute(`DECLARE
@@ -87,12 +88,13 @@ END;`,
 		t.Logf("%d. params=%#v err=%v", i, params, err)
 		if err != nil {
 			t.Errorf("%d. err: %v", i, err)
+			break
 		}
 		t.Logf("%d. serveroutput lines: %s", i, conn.GetServerOutput(lines[:0], -1))
 		if !strings.HasPrefix(ret.String(), "3.140") {
 			t.Errorf("%d. awaited 2, got %q", i, ret.String())
+			break
 		}
-		st.Close()
 	}
 }
 
