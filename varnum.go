@@ -70,20 +70,6 @@ func (n OCINumber) Valid() bool {
 	return !(n[0] == 0xff || n[0] == 0 && n[1] == 0)
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // http://www.orafaq.com/wiki/NUMBER
 //
 func (n OCINumber) String() string {
@@ -110,7 +96,7 @@ func (n OCINumber) String() string {
 	sign := ""
 	var i, j byte
 	if positive {
-		exp = 2*int((byte(exp)+128+64)) - 1
+		exp = 2 * int((byte(exp) + 128 + 64))
 		var j byte
 		for j = 0; j < length; j++ {
 			// Each mantissa byte is a base-100 digit, in the range 1..100.
@@ -123,19 +109,24 @@ func (n OCINumber) String() string {
 		if length < 20 {
 			length--
 		}
-		exp = 2*(int(^byte(exp))-128-64) - 1
+		m := length
+		if m >= 20 {
+			m--
+		}
+		exp = 2 * (int(^byte(exp)) - 128 - 64)
 		sign = "-"
 
-		for j = 0; j < length; j++ {
+		for j = 0; j < m; j++ {
 			digit := 101 - n[j+2]
 			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
 			i += 2
 		}
 	}
-	Log.Debug("String", "n", n[:], "exp", exp, "length", length, "i", i, "j", j)
+	Log.Debug("String", "n", n[:], "exp", exp, "length", length, "i", i, "j", j, "txt", string(txt[:i]))
 	if txt[0] == '0' {
 		txt = txt[1:]
 		i--
+		exp--
 	}
 	if txt[i-1] == '0' {
 		i--

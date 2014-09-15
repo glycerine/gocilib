@@ -27,7 +27,6 @@ import "C"
 
 import (
 	"database/sql/driver"
-	"io"
 	"strings"
 	"unsafe"
 )
@@ -72,44 +71,36 @@ type randNum struct {
 	dump string
 }
 
-func makeRandomNumbers(dst chan<- randNum, conn *Connection) error {
-	defer close(dst)
-	qry := `
+func makeRandomNumber(st *Statement, conn *Connection) (randNum, *Statement, error) {
+	var rn randNum
+	qry := ""
+	var err error
+	if st == nil {
+		qry = `
 		SELECT TO_CHAR(n, 'TM9'), DUMP(n) 
-		  FROM (SELECT dbms_random.value + dbms_random.value(-999999999999999999999,
-					999999999999999999999) n
-				  FROM (SELECT NULL FROM all_objects, all_objects, all_objects))`
-	st, err := conn.NewStatement()
-	if err != nil {
-		return err
+		  FROM (SELECT dbms_random.value +
+		               dbms_random.value(-999999999999999999999, 999999999999999999999) n
+			      FROM DUAL)`
+		st, err = conn.NewStatement()
+		if err != nil {
+			return rn, nil, err
+		}
 	}
-	defer st.Close()
 	if err := st.Execute(qry); err != nil {
-		return err
+		return rn, nil, err
 	}
 	rs, err := st.Results()
 	if err != nil {
-		return err
+		return rn, nil, err
 	}
 	defer rs.Close()
 
-	var (
-		nC, dmp string
-	)
-	row := []driver.Value{&nC, &dmp}
-	for {
-		if err = rs.Next(); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-			break
-		}
-		if err = rs.FetchInto(row); err != nil {
-			return err
-			break
-		}
-		dst <- randNum{nC, dmp}
+	row := []driver.Value{&rn.char, &rn.dump}
+	if err = rs.Next(); err != nil {
+		return rn, nil, err
 	}
-	return nil
+	if err = rs.FetchInto(row); err != nil {
+		return rn, nil, err
+	}
+	return rn, st, nil
 }
