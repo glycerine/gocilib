@@ -17,10 +17,10 @@ limitations under the License.
 package gocilib
 
 import (
+	"bytes"
 	"strconv"
 	"strings"
 
-	"gopkg.in/inconshreveable/log15.v2"
 	"speter.net/go/exp/math/dec/inf"
 )
 
@@ -73,8 +73,6 @@ func (n OCINumber) Valid() bool {
 // http://www.orafaq.com/wiki/NUMBER
 //
 func (n OCINumber) String() string {
-	Log.SetHandler(log15.StderrHandler)
-
 	if !n.Valid() {
 		return ""
 	}
@@ -112,7 +110,6 @@ func (n OCINumber) String() string {
 		exp = 2 * (int(^byte(exp)) - 128 - 64)
 		sign = "-"
 
-		Log.Debug("neg", "length", length, "n[length+1]", n[length+1])
 		if length < OciNumberSize-1 && n[length+1] == 102 {
 			length--
 		}
@@ -123,26 +120,23 @@ func (n OCINumber) String() string {
 			i += 2
 		}
 	}
-	Log.Debug("String", "n", n[:], "exp", exp, "length", length, "i", i, "j", j, "txt", string(txt[:i]))
 	if txt[0] == '0' {
 		txt = txt[1:]
 		i--
 		exp--
 	}
-	if exp < 0 {
-		return sign + "." + strings.Repeat("0", -exp-1) + string(txt[:i])
+	if exp <= 0 {
+		return sign + "." + strings.Repeat("0", -exp) + string(bytes.TrimRight(txt[:i], "0"))
 	}
 	if exp < int(i) {
 		// strip following zeroes
 		for j = i - 1; int(j) >= exp; j-- {
-			Log.Debug("p", "j", j, "exp", exp)
 			if txt[j] == '0' {
 				i--
 			} else {
 				break
 			}
 		}
-		Log.Debug("exp<i", "exp", exp, "i", i, "txt", string(txt[:i]))
 		return sign + string(txt[:exp]) + "." + string(txt[exp:i])
 	}
 	if exp > int(i) {
@@ -160,7 +154,6 @@ func (n *OCINumber) SetString(txt string) *OCINumber {
 	if false {
 		on := GetCOCINumber(txt)
 		n.SetCOCINumberP(on)
-		Log.Debug("SetString", "txt", txt, "on", on, "n", LazyPrint(n))
 		return n
 	}
 
@@ -200,7 +193,6 @@ func (n *OCINumber) SetString(txt string) *OCINumber {
 		}
 	}
 	j := 1
-	Log.Debug("SetString", "txt", txt, "pos?", positive, "dot", dot)
 	if positive {
 		n[j] = byte((dot+1)/2 + 128 + 64)
 		for i := 0; i < len(txt); i += 2 {

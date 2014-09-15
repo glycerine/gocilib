@@ -80,7 +80,7 @@ func TestOCINumberDB(t *testing.T) {
 
 		got := n.String()
 		if got != rn.char {
-			if !(n[0] == 21 && strings.HasPrefix(rn.char, got[:len(got)-3])) {
+			if !(n[0] == 21 && strings.HasPrefix(rn.char, got[:len(got)-5])) {
 				t.Errorf("got %s, awaited %s", got, rn.char)
 				break
 			}
@@ -88,7 +88,7 @@ func TestOCINumberDB(t *testing.T) {
 		var m OCINumber
 		m.SetString(rn.char)
 		if !bytes.Equal(m[:], n[:]) {
-			if !(n[0] == 21 && m[0] == n[0] && bytes.HasPrefix(n[1:], m[1:len(m)-2])) {
+			if !(n[0] >= 20 && m[0] >= 20 && bytes.HasPrefix(n[1:], m[1:len(m)-2])) {
 				t.Errorf("got %v, awaited %v", m[:], n[:])
 				break
 			}
