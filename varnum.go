@@ -107,6 +107,7 @@ func (n OCINumber) String() string {
 
 	// The lower 7 bits represent the exponent, which is a base-100 digit with an offset of 65.
 	exp := int(first & 0x7f)
+	sign := ""
 	var i, j byte
 	if positive {
 		exp = 2*int((byte(exp)+128+64)) - 1
@@ -118,36 +119,31 @@ func (n OCINumber) String() string {
 			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
 			i += 2
 		}
-		if txt[0] == '0' {
-			txt = txt[1:]
-			i--
-		}
 	} else {
-		length--
-		exp = 2*int(^byte(exp)-128-65) + 1
-		i = 1
+		if length < 20 {
+			length--
+		}
+		exp = 2*(int(^byte(exp))-128-64) - 1
+		sign = "-"
 
 		for j = 0; j < length; j++ {
 			digit := 101 - n[j+2]
 			txt[i], txt[i+1] = '0'+digit/10, '0'+digit%10
 			i += 2
 		}
-		if txt[1] == '0' {
-			txt = txt[1:]
-			i--
-		}
-		txt[0] = '-'
 	}
 	Log.Debug("String", "n", n[:], "exp", exp, "length", length, "i", i, "j", j)
-	for int(i) < exp {
-		Log.Debug("0", "i", i, "exp", exp)
-		txt[i] = '0'
-		i++
+	if txt[0] == '0' {
+		txt = txt[1:]
+		i--
 	}
 	if txt[i-1] == '0' {
 		i--
 	}
-	if positive && exp < int(i) {
+	if exp < 0 {
+		return sign + "." + strings.Repeat("0", -exp-1) + string(txt[:i])
+	}
+	if exp < int(i) {
 		// strip following zeroes
 		for j = i - 1; int(j) >= exp; j-- {
 			Log.Debug("p", "j", j, "exp", exp)
@@ -157,12 +153,13 @@ func (n OCINumber) String() string {
 				break
 			}
 		}
-		return string(txt[:exp]) + "." + string(txt[exp:i])
+		Log.Debug("exp<i", "exp", exp, "i", i, "txt", txt[:])
+		return sign + string(txt[:exp]) + "." + string(txt[exp:i])
 	}
-	if !positive && exp+1 < int(i) {
-		return string(txt[:exp+1]) + "." + string(txt[exp+1:i])
+	if exp > int(i) {
+		return sign + string(txt[:i]) + strings.Repeat("0", exp-int(i))
 	}
-	return string(txt[:i])
+	return sign + string(txt[:i])
 }
 
 func (n *OCINumber) SetBytes(data []byte) *OCINumber {
