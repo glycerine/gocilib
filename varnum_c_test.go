@@ -41,12 +41,6 @@ func TestOCINumberDB(t *testing.T) {
 	if testing.Short() {
 		dur = 1 * time.Second
 	}
-	var (
-		err        error
-		st         *Statement
-		rn         randNum
-		stHasClose bool
-	)
 
 	start := time.Now()
 	var n OCINumber
@@ -60,13 +54,9 @@ func TestOCINumberDB(t *testing.T) {
 		if j > 0 {
 			pattern = pattern[j:] + "." + pattern[j:]
 		}
-		rn, err = makeRandomNumber(conn, pattern)
+		rn, err := makeRandomNumber(conn, pattern)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if stHasClose && st != nil {
-			defer st.Close()
-			stHasClose = true
 		}
 		t.Logf("%s=%s", rn.char, rn.dump)
 		txt := rn.dump[10:]
@@ -90,14 +80,25 @@ func TestOCINumberDB(t *testing.T) {
 
 		got := n.String()
 		if got != rn.char {
-			t.Errorf("got %s, awaited %s", got, rn.char)
-			break
+			if !(n[0] == 21 && strings.HasPrefix(rn.char, got[:len(got)-3])) {
+				t.Errorf("got %s, awaited %s", got, rn.char)
+				break
+			}
 		}
 		var m OCINumber
 		m.SetString(rn.char)
 		if !bytes.Equal(m[:], n[:]) {
-			t.Errorf("got %v, awaited %v", m[:], n[:])
-			break
+			if !(n[0] == 21 && m[0] == n[0] && bytes.HasPrefix(n[1:], m[1:len(m)-2])) {
+				t.Errorf("got %v, awaited %v", m[:], n[:])
+				break
+			}
 		}
 	}
+}
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
 }

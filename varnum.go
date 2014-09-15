@@ -176,41 +176,50 @@ func (n *OCINumber) SetString(txt string) *OCINumber {
 		positive = false
 		txt = txt[1:]
 	}
+	if txt == "0" {
+		n[0], n[1] = 1, 128
+		return n
+	}
 	txt = strings.TrimLeft(txt, "0")
 	dot := strings.IndexByte(txt, '.')
 	if dot >= 0 {
-		txt = txt[:dot] + txt[dot+1:]
+		txt = txt[:dot] + strings.TrimRight(txt[dot+1:], "0")
+		if dot%2 == 1 {
+			txt = "0" + txt
+		}
+		if len(txt)%2 > 0 {
+			txt = txt + "0"
+		}
 	} else {
 		dot = len(txt)
-	}
-	if dot%2 == 1 {
-		txt = "0" + txt
-	}
-	if len(txt)%2 > 0 {
-		txt = txt + "0"
+		for strings.HasSuffix(txt, "00") {
+			txt = txt[:len(txt)-2]
+		}
+		if len(txt)%2 > 0 {
+			txt = "0" + txt
+		}
 	}
 	j := 1
+	Log.Debug("SetString", "txt", txt, "pos?", positive, "dot", dot)
 	if positive {
 		n[j] = byte((dot+1)/2 + 128 + 64)
-		j++
-		Log.Debug("SetString", "txt", txt)
 		for i := 0; i < len(txt); i += 2 {
-			n[j] = 1 + ((txt[i]-'0')*10 + txt[i+1] - '0')
 			j++
+			n[j] = 1 + ((txt[i]-'0')*10 + txt[i+1] - '0')
 		}
 	} else {
 		n[j] = ^byte((dot+1)/2 + 128 + 64)
-		j++
 		for i := 0; i < len(txt); i += 2 {
+			j++
 			n[j] = 101 - ((txt[i]-'0')*10 + txt[i+1] - '0')
-			j++
 		}
-		if j < OciNumberSize-1 {
+		if n[j] == 101 {
 			n[j] = 102
+		} else if j < OciNumberSize-1 {
 			j++
+			n[j] = 102
 		}
 	}
-	j--
 	n[0] = byte(j)
 	return n
 }
