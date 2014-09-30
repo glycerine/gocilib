@@ -1,0 +1,4 @@
+#!/bin/sh -e
+gcc -I/usr/include/oracle/12.1/client64 -L/usr/lib/oracle/12.1/client64/lib \
+	-locilib -lclntsh \
+	num_array.c -o num_array
