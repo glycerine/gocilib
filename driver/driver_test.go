@@ -116,6 +116,42 @@ func TestDDL(t *testing.T) {
 	}
 }
 
+func TestSelectBind(t *testing.T) {
+	conn := getConnection(t)
+	defer conn.Close()
+
+	tbl := `(SELECT 1 id FROM DUAL
+             UNION ALL SELECT 2 FROM DUAL
+             UNION ALL SELECT 1234567890123 FROM DUAL)`
+
+	qry := "SELECT * FROM " + tbl
+	rows, err := conn.Query(qry)
+	if err != nil {
+		t.Errorf("get all rows: %v", err)
+		return
+	}
+
+	var id int64
+	i := 1
+	for rows.Next() {
+		if err = rows.Scan(&id); err != nil {
+			t.Errorf("%d. error: %v", i, err)
+		}
+		t.Logf("%d. %d", i, id)
+		i++
+	}
+	if err = rows.Err(); err != nil {
+		t.Errorf("rows error: %v", err)
+	}
+
+	qry = "SELECT id FROM " + tbl + " WHERE id = :1"
+	if err = conn.QueryRow(qry, 1234567890123).Scan(&id); err != nil {
+		t.Errorf("bind: %v", err)
+		return
+	}
+	t.Logf("bind: %d", id)
+}
+
 var testDB *sql.DB
 
 func getConnection(t *testing.T) *sql.DB {
