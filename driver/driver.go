@@ -28,8 +28,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/juju/errgo"
 	"github.com/tgulacsi/gocilib"
+	"gopkg.in/errgo.v1"
 )
 
 var (
